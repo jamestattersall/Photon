@@ -1,0 +1,20 @@
+@Photon_HostAddress = https://localhost:7187
+
+GET {{Photon_HostAddress}}/Indexes/1,0,20/tat
+Accept: application/json
+
+###
+
+
+GET {{Photon_HostAddress}}/EntityTypes
+Accept: application/json
+
+
+###
+ 
+
+GET {{Photon_HostAddress}}/ViewValues/1,1,0
+Accept: application/json
+
+
+###

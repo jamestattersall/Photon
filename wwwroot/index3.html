@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Photon</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+    <link href='https://fonts.googleapis.com/css?family=Amaranth' rel='stylesheet'>
+
+    <script type="module">
+        import { createApp } from 'https://unpkg.com/petite-vue?module'
+
+        createApp({
+         
+            entityType: {},
+            view: {},
+            views: [],
+            viewsPage: 0,
+            get viewStart() {
+                return this.viewsPage * 20 + 1;
+            },
+            get viewEnd() {
+                if (this.viewStart > this.views.length) return 0;
+                return this.viewStart + 20;
+            },
+            indexType: {},
+            indexTypePage: 0,
+            indexes: [],
+            indexPage: 0,
+            indexSearch: '',
+            moreIndexes: true,
+            entityTypes: [],
+            entityId: 0,
+            timer: null,
+            values: [],
+            idValues: [],
+            page: 0,
+            nPages: 0,
+            isAuthenticated: false,
+            pwd: "",
+            loginMessage: "",
+            menuId: null,
+            menuItems: [],
+            row: 0,
+            mode: 0,
+            // methods
+            logout() {
+                this.pwd = ""
+                this.isAuthenticated = false;
+                this.mode = 0;
+            },
+            tryLogin() {
+                var pwd = this.pwd
+                if (pwd.length == 0) {
+                    this.authenticated = false;
+                    this.loginMessage = "you must enter a password";
+                    return;
+                }
+                fetchWrapper
+                    .get('TryLogin/' + pwd)
+                    .then(data => {
+                        this.userStarter = data;
+                        if (data != null) {
+                            this.isAuthenticated = true;
+                            this.menuId = data.menuId
+                            fetchWrapper
+                                .get('EntityTypes')
+                                .then(data => {
+                                    this.entityTypes = data
+                                    this.setEntityType(this.entityTypes.find(e => e.id == 1))
+                                })
+                                .catch((error) => console.error(error));
+
+                        } else {
+                            this.isAuthenticated = false;
+                            this.loginMessage = "invalid password";
+                        }
+                    })
+                    .catch((error) => console.error(error));
+             
+                
+            },
+            setEntityType(entityType) {
+                this.entityType = entityType
+                this.indexType = this.entityType.indexTypes.find(t => t.id == this.entityType.defaultIndexTypeId)
+                this.viewsPage = 0;
+                this.getViews();
+                this.Clear()
+                this.mode = 1
+                this.getIndexes()
+            },
+            setIndexType(indexType) {
+                this.indexType = indexType
+                this.indexTypePage = 0
+                this.getIndexes()
+            },
+            searchIndexes(e) {
+                this.indexPage = 0
+                this.indexSearch = e.target.innerText;
+                this.getIndexes()
+            },
+            getIndexes() {
+                
+                fetchWrapper
+                    .get('Indexes/' + this.indexType.id + ',' + this.indexPage + ',20' + '/' + this.indexSearch)
+                    .then((data) => {
+                        this.indexes = data
+                    })
+                    .catch((error) => console.error(error));
+           
+            },
+            getIndexNextPage() {
+                this.indexPage++
+                this.getIndexes();
+            },
+            getIndexPreviousPage() {
+                this.indexPage--
+                this.getIndexes();
+            },
+            NextPage() {
+                this.page++;
+                this.GetMainValues()
+            },
+            PreviousPage() {
+                this.page--;
+                this.GetMainValues()
+            },
+            NewPage() {
+            },
+            Graph(attributeId) {
+                alert(attributeId);
+            },
+            async GetMainValues() {
+                fetchWrapper
+                    .get('ViewValues/' + this.view.id + ',' + this.entityId + ',' + this.page)
+                    .then((values) => this.values = values)
+                    .catch((error) => console.error(error));
+            },
+            async GetIdValues() {
+                fetchWrapper
+                    .get('ViewValues/' + this.entityType.idlineViewId + ',' + this.entityId + ',0')
+                    .then((values) => this.idValues = values)
+                    .catch((error) => console.error(error));
+            },
+            viewSearchChanged(e) {
+                this.getViews(e.target.innerText);
+            },
+            getViews(search) {
+                if (typeof search === "string" && search.length > 0) {
+                    this.views = this.entityType.views.filter(v => v.captions.some(c => c.text.toLowerCase().includes(search.toLowerCase())));
+
+                    return;
+                } 
+                this.views = this.entityType.views;
+                
+            },
+            indexSearchChanged(e) {
+               // this.searchIndex = e.target.innerText;
+            
+                if (this.timer) {
+                    clearTimeout(this.timer)
+                }
+                this.indexSearch=e.target.innerText
+                this.timer = setTimeout(() => {
+                    this.getIndexes(); // call the function if time expires
+                }, 500);
+
+            },
+            SetView(view) {
+                this.view = view
+                this.page = 0
+                if (this.entityId > 0) {
+                    this.GetMainValues()
+                    this.GetNPages()
+                }
+            },
+            SetEntity(entityId) {
+                this.entityId = entityId
+                this.page = 0
+                if (this.entityId > 0) {
+                    this.GetIdValues()
+                    if (this.view.id > 0) {
+                        this.GetMainValues()
+                        this.GetNPages()
+                        return
+                    }
+                }
+            },
+            GetNPages() {
+                fetchWrapper
+                    .get('NPages/' + this.view.id + ',' + this.entityId)
+                    .then((data) => this.nPages = data)
+                    .catch((error) => console.error(error));
+            },
+            Clear() {
+                this.view = {}
+                this.idValues = []
+                this.values = []
+            }
+
+        }).mount()
+
+
+        class FetchWrapper {
+            constructor(baseUrl) {
+                this.baseUrl = baseUrl;
+                console.log(baseUrl)
+            }
+
+            async get(url) {
+                console.log(`${this.baseUrl}${url}`)
+                const response = await fetch(`${this.baseUrl}${url}`);
+                
+                if (!response.ok) {
+                    throw new Error("Network response was not ok");
+                }
+                return response.json();
+            }
+
+            async put(url, data) {
+                const response = await fetch(`${this.baseUrl}${url}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                return response.json();
+            }
+
+            async post(url, data) {
+                const response = await fetch(`${this.baseUrl}${url}`, {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                return response.json();
+            }
+
+            async delete(url) {
+                const response = await fetch(`${this.baseUrl}${url}`, {
+                    method: 'DELETE',
+                });
+                return response.json();
+            }
+        }
+
+        const fetchWrapper = new FetchWrapper(window.origin + '/');
+
+
+    </script>
+</head>
+
+<body v-scope >
+
+
+    <svg viewBox="0 0 200 500" preserveAspectRatio="none" class="nav" v-show="mode==1"
+         font-size="17">
+        <text class="caption" x="10" y="20">Select {{entityType.name}}</text>
+
+        <foreignObject x="10" y="40" width="180" height="20">
+            <p contenteditable class="input" @input="indexSearchChanged">
+            </p>
+        </foreignObject>
+
+        <text v-for="(i, index) in indexes" class="input"
+              x="10" :y="index*20 + 80" v-bind:class="[(i.entityId == entityId) ? 'selected' : 'input']"
+              @click="SetEntity(i.entityId)">{{i.term}}</text>
+
+        <text class="caption clickable" @click="getIndexPreviousPage" x="10" y="490" v-show="indexPage>0">&lt;BACK</text>
+        <text class="caption clickable" @click="getIndexNextPage" x="110" y="490" v-show="indexes.length==20">NEXT&gt;</text>
+
+    </svg>
+
+    <svg viewBox="0 0 200 500" preserveAspectRatio="none" class="nav" v-show="mode==2"
+         font-size="17">
+        <text class="caption" x="10" y="20">Select view</text>
+
+        <foreignObject x="10" y="40" width="180" height="20">
+            <p contenteditable class="input" @input="viewSearchChanged">
+
+            </p>
+        </foreignObject>
+        <text v-for="(v, index) in views.slice(viewStart, viewEnd)" class="input"
+              x="10" :y="index*20+80" v-bind:class="[(v == view) ? 'selected' : 'input']"
+              @click="SetView(v)">
+            {{v.name}}
+        </text>
+        <text class="caption clickable" @click="viewsPage--" x="10" y="490" v-show="viewsPage>0">&lt;BACK</text>
+        <text class="caption clickable" @click="viewsPage++" x="110" y="490" v-show="viewEnd>0">NEXT&gt;</text>
+    </svg>
+
+    <svg viewBox="0 0 200 500" preserveAspectRatio="none" class="nav" v-show="mode==3"
+         font-size="17">
+        <text class="caption" x="10" y="20">Select entity type</text>
+
+        <text v-for="(t, index) in entityTypes" class="input"
+              x="10" :y="index*20 + 60" v-bind:class="[(t.id == entityType.id) ? 'selected' : 'input']"
+              @click="setEntityType(t)">{{t.name}}</text>
+
+    </svg>
+
+    <svg viewBox="0 0 200 500" preserveAspectRatio="none" class="nav" v-show="mode==4"
+         font-size="17">
+        <text class="caption" x="10" y="20">Select index type</text>
+
+        <text v-for="(t, index) in entityType.indexTypes.slice(indexTypePage * 20 , indexTypePage * 20 + 21)"
+              x="1" :y="index*20 + 60" v-bind:class="[(t == indexType) ? 'selected' : 'input']"
+              @click="setIndexType(t)">{{t.name}}</text>
+
+        <text class="caption clickable" @click="indexTypePage--" x="10" y="490" v-show="indexTypePage>0">&lt;BACK</text>
+        <text class="caption clickable" @click="indexTypePage++" x="110" y="490" v-show="(indexTypePage * 20 + 20 ) <= entityType.indexTypes.length">NEXT&gt;</text>
+
+    </svg>
+
+
+    <svg viewBox="0 0 80 50" preserveAspectRatio="none" class="main"
+         xmlns="http://www.w3.org/2000/svg" font-size="1.7" v-show="isAuthenticated">
+        <line x1="0" y1="3" x2="80" y2="3"></line>
+        <line x1="0" y1="41" x2="80" y2="41"></line>
+        <line x1="40" y1="41" x2="40" y2="50"></line>
+        <line x1="0" y1="0" x2="0" y2="50"></line>
+        <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2">{{c.text}}</text>
+        <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
+        <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
+        <rect v-for="a in view.numericAttributes" :height="view.nRows" :width="a.displayLength" class="clickable"
+              :x="a.x" :y="(a.y-1)*2" @click="Graph(a.attributeId)" />
+        <text v-show="(nPages>1 && page>0)" class="value clickable" x="42" , y="43" @click="PreviousPage">Prev. page</text>
+        <text v-show="(nPages>1 && page<nPages)" class="value clickable" x="42" , y="45" @click="NextPage">Next page</text>
+        <text v-show="nPages>1" class="value" x="42" y="47">{{page + 1}}/{{nPages}}</text>
+        <text :class="[(mode==1)? 'selected': 'input']" x="1" y="43" @click="mode=1">Select {{entityType.name}} by {{indexType.name}}</text>
+        <text :class="[(mode==2)? 'selected': 'input']" x="1" y="45" @click="mode=2">Select view</text>
+        <text :class="[(mode==3)? 'selected': 'input']" x="1" y="47" @click="mode=3">Select entity type</text>
+        <text :class="[(mode==4)? 'selected': 'input']" x="1" y="49" @click="mode=4">Select {{entityType.name}} index type</text>
+        <text class="input" x="33" y="45" @click="logout">logout</text>
+
+    </svg>
+    <svg v-show="!isAuthenticated" viewBox="0 0 800 500" preserveAspectRatio="none" class="login"
+         font-size="17">
+        <text x="20" y="60" class="caption">Proton password:</text>
+        <foreignObject x="170" y="40" width="180" height="30">
+            <input type="password" v-model="pwd" width="170" 1autocomplete="off" @keydown.enter="tryLogin" />
+        </foreignObject>
+        <g @click="tryLogin">
+            <rect x="360" y="40" width="100" height="30" class="button"  fill="white"/>
+            <text x="380" y="60" class="button"  >submit</text>
+        </g>
+        <text class="caption" x="20" y="100">{{loginMessage}}</text>
+
+
+    </svg>
+    
+    <style>
+        svg {
+            height: 100Vh;
+            display: block;
+            font-family: Fira Code, monospace;
+        }
+
+            svg.nav {
+                width: 25%;
+                float: left;
+                background-color: midnightblue;
+            }
+
+            svg.main {
+                width: 75%;
+                float: right;
+                background-color: navy;
+            }
+            svg.login {
+                width: 100%;
+                float: right;
+                background-color: navy;
+            }
+
+        line {
+            stroke: grey;
+            stroke-width: 0.1;
+        }
+
+        text.value {
+            fill: white;
+        }
+
+        text.input {
+            fill: grey;
+            cursor: pointer;
+        }
+
+        rect.clickable {
+            opacity: 0;
+            cursor: pointer;
+        }
+        rect.button {
+            fill: lightgray;
+            stroke:black;
+            stroke-width:4px;
+            cursor: pointer;
+        }
+        text.clickable {
+            cursor: pointer;
+        }
+
+        text.button {
+            cursor: pointer;
+            fill: black;
+        }
+        text.selected {
+            fill: yellow;
+        }
+
+        text.caption {
+            fill: yellow;
+        }
+
+        [contenteditable] {
+            outline: 0px solid transparent;
+        }
+
+        input {
+            outline: 0px solid transparent;
+
+        }
+
+        p.input {
+            background-color: white;
+        }
+    </style>
+</body>
+</html>

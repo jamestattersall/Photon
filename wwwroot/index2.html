@@ -1,0 +1,406 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Photon</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+    <link href='https://fonts.googleapis.com/css?family=Amaranth' rel='stylesheet'>
+
+    <script type="module">
+        import { createApp } from 'https://unpkg.com/petite-vue?module'
+
+        createApp({
+            mounted() {
+                fetchWrapper
+                    .get('EntityTypes')
+                    .then(data => {
+                        this.entityTypes = data
+                        this.entityType = this.entityTypes.find(e => e.id == 1)
+                        this.indexTypeId = this.entityType.defaultIndexTypeId
+                    })
+                    .catch((error) => console.error(error));
+            },
+            entityType: {},
+            view: {},
+            indexTypeId: 0,
+            indexes: [],
+            entityTypes: [],
+            entityId: 0,
+            timer: null,
+            values: [],
+            searchViews: "",
+            idValues: [],
+            page: 0,
+            searchIndex: "",
+            views: [],
+            nPages: 0,
+            authenticated: false,
+            pwd: "",
+            loginMessage: "",
+            menuId: null,
+            menuItems: [],
+            row: 0,
+            // methods
+           
+            TryLogin() {
+                if (this.pwd.length == 0) {
+                    this.authenticated = false;
+                    this.loginMessage = "you must enter a password";
+                    return;
+                } 
+                fetchWrapper
+                    .get('TryLogin/' + this.pwd).then(data => {
+                        this.userStarter = data;
+                        if (data != null) {
+                            this.authenticated = true;
+                            this.menuId = data.menuId
+                        } else {
+                            this.authenticated = false;
+                            this.loginMessage = "invalid password";
+                        }
+                    })
+                    .catch((error) => console.error(error));
+
+
+            },
+            EntityTypeChanged() {
+                this.indexTypeId = this.entityType.defaultIndexTypeId
+                this.Clear()
+
+                this.searchIndex = ''
+                this.searchViews = ''
+
+                this.GetIndexes()
+            },
+            GetIndexes() {
+                fetchWrapper
+                    .get('Indexes/' + this.indexTypeId + ',0,20' + '/' + this.searchIndex)
+                    .then((data) => this.indexes = data)
+                    .catch((error) => console.error(error));
+
+            },
+            NextPage() {
+                this.page++;
+                this.GetMainValues()
+            },
+            PreviousPage() {
+                this.page--;
+                this.GetMainValues()
+            },
+            NewPage() {
+            },
+            Graph(attributeId) {
+                alert(attributeId);
+            },
+            async GetMainValues() {
+                fetchWrapper
+                    .get('ViewValues/' + this.view.id + ',' + this.entityId + ',' + this.page)
+                    .then((values) => this.values = values)
+                    .catch((error) => console.error(error));
+            },
+            async GetIdValues() {
+                fetchWrapper
+                    .get('ViewValues/' + this.entityType.idlineViewId + ',' + this.entityId + ',0')
+                    .then((values) => this.idValues = values)
+                    .catch((error) => console.error(error));
+            },
+            IndexSearchChanged() {
+                if (this.timer) {
+                    clearTimeout(this.timer)
+                }
+                this.timer = setTimeout(() => {
+                    this.GetIndexes(); // call the function if time expires
+                }, 500);
+
+            },
+            SetView(view) {
+                this.view = view
+                this.page = 0
+                if (this.entityId > 0) {
+                    this.GetMainValues()
+                    this.GetNPages()
+                }
+            },
+            SetEntity(entityId) {
+                this.entityId = entityId
+                this.page = 0
+                if (this.entityId > 0) {
+                    this.GetIdValues()
+                    if (this.view.id > 0) {
+                        this.GetMainValues()
+                        this.GetNPages()
+                        return
+                    }
+                }
+            },
+            get filteredViews() {
+
+                //no filters? show them all
+                if (this.searchViews.length === 0) {
+                    return this.entityType.views;
+                }
+
+                return this.entityType.views
+                    .filter(v => v.captions.some(c => c.text.toLowerCase().includes(this.searchViews.toLowerCase())))
+                    .sort((a,b) => textSort(a, b));
+                
+
+                function textSort(a, b) {
+                    const nameA = a.name.toUpperCase(); // ignore upper and lowercase
+                    const nameB = b.name.toUpperCase(); // ignore upper and lowercase
+                    if (nameA < nameB) {
+                        return -1;
+                    }
+                    if (nameA > nameB) {
+                        return 1;
+                    }
+
+                    // names must be equal
+                    return 0;
+                }
+            },
+            GetNPages() {
+                fetchWrapper
+                    .get('NPages/' + this.view.id + ',' + this.entityId)
+                    .then((data) => this.nPages = data)
+                    .catch((error) => console.error(error));
+            },
+            Clear() {
+                this.view = {}
+                this.idValues = []
+                this.values = []
+            }
+
+        }).mount()
+
+
+        class FetchWrapper {
+            constructor(baseUrl) {
+                this.baseUrl = baseUrl;
+            }
+
+            async get(url) {
+                const response = await fetch(`${this.baseUrl}${url}`);
+                
+                if (!response.ok) {
+                    throw new Error("Network response was not ok");
+                }
+                return response.json();
+            }
+
+            async put(url, data) {
+                const response = await fetch(`${this.baseUrl}${url}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(data),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                return response.json();
+            }
+
+            async post(url, data) {
+                const response = await fetch(`${this.baseUrl}${url}`, {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                return response.json();
+            }
+
+            async delete(url) {
+                const response = await fetch(`${this.baseUrl}${url}`, {
+                    method: 'DELETE',
+                });
+                return response.json();
+            }
+        }
+
+        const fetchWrapper = new FetchWrapper(window.origin + '/');
+
+
+    </script>
+</head>
+
+<body v-scope @vue:mounted="mounted">
+    <!-- v-scope value can be omitted -->
+    <div v-if="authenticated">
+        <div class="row ">
+            <div class="col-2 bg-primary">
+
+
+                <div class="row">
+                    <div class="mb-3">
+                        <label for="basicSelect" class="form-label">Entity type</label>
+                        <select class="form-select" id="basicSelect" v-model="entityType" @change="EntityTypeChanged()">
+                            <option v-for="e in entityTypes" :value="e">{{e.name}}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="mb-3">
+                        <label for="basicInput1" class="form-label">Views</label>
+                        <input type="text" class="form-control" id="basicInput1" v-model="searchViews" placeholder="Enter view">
+                    </div>
+                    <div class="container-fluid">
+                        <div class="list-group overflow-auto" style="max-height: 80vh;
+                                margin-bottom: 10px;
+                                overflow:scroll;">
+                            <a href="#" v-for="v in filteredViews" @click="SetView(v)" class="list-group-item list-group-item-action">{{v.name}}</a>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <div class="col-8">
+
+                    <svg viewBox="0 0 80 50" preserveAspectRatio="none"
+                         xmlns="http://www.w3.org/2000/svg" font-size="1.7" >
+                        <rect width="80" height="50" fill="navy" />
+                        <line x1="0" y1="3" x2="80" y2="3"></line>
+                        <line x1="0" y1="41" x2="80" y2="41"></line>
+                        <line x1="40" y1="41" x2="40" y2="50"></line>
+                        <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2">{{c.text}}</text>
+                        <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
+                        <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
+                        <rect v-for="a in view.numericAttributes" :height="view.nRows" :width="a.displayLength" class="clickable"
+                              :x="a.x" :y="(a.y-1)*2"  @click="Graph(a.attributeId)" />
+                        <text v-show="(nPages>1 && page>0)" class="value clickable" x="42" , y="46" @click="PreviousPage">Prev. page</text>
+                        <text v-show="(nPages>1 && page<nPages)" class="value clickable" x="42" , y="44" @click="NextPage">Next page</text>
+                        <text v-show="nPages>1" class="value" x="42" , y="48">{{page + 1}}/{{nPages}}</text>
+
+                    </svg>
+
+                    <style>
+                        html, body {
+                            height: 100%;
+                            margin: 0;
+                        }
+
+                        line {
+                            stroke: grey;
+                            stroke-width: 0.1;
+                        }
+
+                        text.clickable {
+                            cursor: pointer;
+                            fill: yellow;
+                        }
+
+                        text.value {
+                            fill: white;
+                            /*font-size: 140%;*/
+                        }
+
+                        input.input{
+                            opacity:0;
+                            fill:green;
+                        }
+
+                        text.caption {
+                            fill: yellow;
+                            /*font-size: 140%;*/
+                        }
+
+                        rect.clickable {
+                            opacity:0;
+                            cursor:pointer;
+                        }
+
+                        svg {
+                            width: 100%;
+                            height: 100vh;
+                            display: block;
+                            font-family: Fira Code, monospace;
+                        }
+                    </style>
+
+
+            </div>
+            <div class="col-2 bg-primary">
+                <div class="row">
+                    <div class="mb-3">
+                        <label for="basicSelect" class="form-label">Index type</label>
+                        <select class="form-select" id="basicSelect" v-model="indexTypeId"
+                                @change="GetIndexes()">
+                            <option v-for="i in entityType.indexTypes" :value="i.id">{{i.name}}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <form>
+                        <div class="mb-3">
+                            <label for="basicInput2" class="form-label">Search</label>
+                            <input type="text" class="form-control" v-model="searchIndex" @input="IndexSearchChanged()" id="basicInput2" placeholder="Enter name">
+                        </div>
+                        <div class="list-group">
+                            <a href="#" v-for="i in indexes" @click="SetEntity(i.entityId)" class="list-group-item list-group-item-action">{{i.term}}</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </div>
+        <style>
+
+            #topContainer {
+                background-color: #b7daf3;
+                margin-top: 20%;
+                width:20%;
+                align-content:center;
+            }
+
+            h1 {
+                text-align: center;
+            }
+
+            .centered-content {
+                width: 50%;
+                margin: 0 auto;
+                text-align: center;
+            }
+
+            .row {
+                margin-top: 40px;
+                text-align: center;
+            }
+        </style>
+
+        <div class="container contentContainer" id="topContainer">
+
+            <div class="row justify-content-md-center">
+                <div class="col-6 col-offset-3">
+                    <h1>Proton Password </h1>
+                </div>
+            </div>
+
+            <div class="row justify-content-md-center">
+                <div class="col-6 col-offset-3">
+                    <input class="form-control" type="password" v-model="pwd" v-on:keyup.enter="TryLogin" />
+                </div>
+                <div v-else>
+                </div>
+
+                <div class="row justify-content-md-center">
+                    <div class="col-6 col-offset-3">
+                        <input type="button" class="btn btn-success btn-lg" value="Submit" @click="TryLogin" />
+                    </div>
+                </div>
+
+                <div class="row justify-content-md-center">
+                    <div class="col-6 col-offset-3">
+                        <h2>{{loginMessage}}</h2>
+                    </div>
+                </div>
+            </div>
+
+
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
+</body>
+</html>

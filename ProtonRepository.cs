@@ -1,0 +1,273 @@
+﻿using Dapper;
+using Microsoft.Data.SqlClient;
+using Microsoft.Win32.SafeHandles;
+using System.Data;
+using System.Formats.Asn1;
+using System.Net;
+using System.Security.Principal;
+using System.Text;
+
+public class ProtonRepository(string connectionString)
+{
+    private readonly string _connectionString = connectionString;
+
+    public UserStarter? TryLogin(HttpContext context, string pwd)
+    {
+        var encrypted = Decrypt(pwd);
+        return GetResult<UserStarter>(context, "SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
+            new { userCode = encrypted }).FirstOrDefault();
+    }
+
+    public IEnumerable<ViewText> GetViewCaptions(HttpContext context, int viewId)
+    {
+
+        return GetResult<ViewText>(context,
+            "SELECT Caption text, x,y FROM ViewCaptions WHERE ViewId=@viewId",
+            new { ViewId = viewId }
+        );
+    }
+
+    public IEnumerable<ViewValue> GetViewValues(HttpContext context, int viewId, int entityId, int page=0)
+    {
+        return GetResult<ViewValue>(context,
+            "SELECT Value text, x, y, dataTypeId, attributeId FROM GetViewValues(@viewId, @entityId, @page)",
+            new { ViewId = viewId, EntityId=entityId, Page=page}
+        );
+    }
+
+    public IEnumerable<NumericAttribute> GetViewNumericAttributes(HttpContext context, int viewId)
+    {
+        return GetResult<NumericAttribute>(context,
+            @"
+SELECT AttributeId, a.Name, X, Y, DataTypeId, DisplayLength
+FROM ViewAttributes v 
+INNER JOIN Attributes a ON a.Id=v.AttributeId
+INNER JOIN Tables t ON t.Id=a.TableId
+WHERE v.ViewId=@ViewId
+AND t.DateAttributeId > 0
+AND a.DataTypeId IN (2,7)",
+            new { ViewId = viewId }
+        );
+    }
+
+    public IEnumerable<IndexType> GetIndexTypes(HttpContext context, int entityTypeId)
+    {
+        return GetResult<IndexType>(context,
+            "SELECT Id, Name FROM IndexTypes WHERE EntityTypeId=@EntityTypeId",
+            new { EntityTypeId = entityTypeId }
+        );
+    }
+    public IEnumerable<EntityType> GetEntityTypes(HttpContext context)
+    {
+        var ets = GetResult<EntityType>(context,
+            "SELECT Id, Name, DefaultIndexTypeId, idlineViewId FROM EntityTypes",
+            new {  }
+        );
+
+        foreach(EntityType et in ets)
+        {
+            et.IndexTypes = GetIndexTypes(context, et.Id);
+            et.Views = GetViews(context, et.Id);
+        }
+
+        return ets;
+    }
+   
+    public IEnumerable<View>GetViews(HttpContext context, int entityTypeId)
+    {
+        var vs = GetResult<View>(context, @"
+SELECT v.Id, v.Name, v.nRows
+FROM Views v
+INNER JOIN Tables t ON t.Id = v.TableId
+WHERE t.EntityTypeId = @entityTypeId
+AND NOT v.Name = ''
+ORDER BY v.Name",
+            new { EntityTypeId = entityTypeId }
+        );
+
+        foreach(View v in vs)
+        {
+            v.Captions = GetViewCaptions(context,v.Id);
+            v.NumericAttributes = GetViewNumericAttributes(context,v.Id);
+        }
+
+        return vs;
+    }
+
+    public IEnumerable<Index> GetIndexes(HttpContext context, int indexTypeId, int page = 0, int nRows = 16, string? searchterm="")
+    {
+        return GetResult<Index>(context,
+            @"
+SELECT Term, EntityId 
+FROM Indexes 
+WHERE IndexTypeId=@IndexTypeId 
+    AND Term LIKE @term + '%'
+ORDER BY Term
+OFFSET @startRow ROWS 
+FETCH NEXT @Nrows ROWS ONLY",
+            new { IndexTypeId = indexTypeId, term = searchterm, StartRow = page * nRows, Nrows = nRows }
+        );
+    }
+
+    public IEnumerable<DatedValue> GetDatedValues(HttpContext context, int entityId, short attributeId, int daysBack)
+    {
+        return GetResult<DatedValue>(context, @"
+SELECT d.Value [date], n.Value 
+FROM ValueNumbers n
+INNER JOIN Attributes a on a.Id=n.AttributeId
+INNER JOIN Tables t ON t.Id=a.TableId
+INNER JOIN ValueDates d on d.EntityId=n.EntityId and d.AttributeId=t.DateAttributeId and d.seq=n.seq
+WHERE n.EntityId = @EntityId
+AND n.AttributeId = @AttributeId
+AND d.Value > dateAdd(dd,-@DaysBack,getdate())
+ORDER BY d.Value desc
+", new {EntityId = entityId, AttributeId=attributeId, DaysBack=daysBack });
+
+    }
+
+    private IEnumerable<T> GetResult<T>(HttpContext context, string sql, object parameters) {
+        IEnumerable<T> result = [];
+        WindowsIdentity user = (WindowsIdentity)context.User.Identity!;
+
+        //impersonate Windows credentials of user making the request
+        //WindowsIdentity.RunImpersonated(user.AccessToken, () =>
+       // {
+        using var cn = new SqlConnection(_connectionString);
+        try
+        {
+           // cn.Open();
+            result = cn.Query<T>(sql, parameters);
+        }
+        catch(Exception ex)
+        {
+            throw ( new Exception(ex.Message));
+        }
+      //  });
+        return result;
+    }
+
+    private IEnumerable<T> GetResultSp<T>(string spName, object parameters)
+    {
+        using var _db = new SqlConnection(_connectionString);
+        _db.Open();
+        return _db.Query<T>(spName, parameters, commandType: CommandType.StoredProcedure);
+    }
+
+    public int NPages(HttpContext context, short viewId, int entityId)
+    {
+        int res = 0;
+
+        WindowsIdentity user = (WindowsIdentity)context.User.Identity!;
+        WindowsIdentity.RunImpersonated(user.AccessToken, () =>
+        {
+            using var cn = new SqlConnection(_connectionString);
+           // cn.Open();
+            res = cn.ExecuteScalar<int>($@"
+SELECT MAX(CEILING(CAST(d.seq AS FLOAT)/v.NRows)) AS NRows
+FROM Views v
+INNER JOIN Tables t ON t.Id=v.TableId
+INNER JOIN ValueDates d ON d.EntityId={entityId} AND d.AttributeId=t.DateAttributeId
+WHERE v.id={viewId}
+GROUP BY v.NRows");
+        });
+
+        return res;
+
+    }
+
+    string Decrypt(string input)
+    {
+        var chars = input.ToCharArray();
+        byte[] bytes = new byte[chars.Length];
+        for (int i = 0; i < chars.Length; i++)
+        {
+            bytes[i] = Encoding.ASCII.GetBytes(chars[i].ToString())[0];
+            //decrypt using XOR 31 (c# ^ 31) 
+            bytes[i] ^= 31;
+        }
+        return Encoding.ASCII.GetString(bytes);
+    }
+}
+
+public class Entity
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+}
+
+public class EntityType
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public int DefaultIndexTypeId { get; set; }
+    public int IdlineViewId { get; set; }
+    public IEnumerable<View> Views { get; set; } = [];
+    public IEnumerable<IndexType> IndexTypes { get; set; } = [];
+}
+
+public class ViewText
+{
+    public string Text { get; set; }
+    public byte X { get; set; }
+    public byte Y { get; set; }
+}
+
+public class ViewValue
+{
+    public string Text { get; set; }
+    public byte X { get; set; }
+    public byte Y { get; set; }
+    public byte dataTypeId { get; set; }
+    public short attributeId { get; set; }
+}
+
+public class Index
+{
+    public string Term { get; set; }
+    public int EntityId { get; set; }
+}
+
+public class IndexType
+{
+    public string Name { get; set; }
+    public int id { get; set; }
+}
+
+public class View
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public byte nRows { get; set; }
+    public IEnumerable<ViewText> Captions { get; set; } = [];
+    public IEnumerable<NumericAttribute> NumericAttributes { get; set; } = [];
+}
+
+public class NumericAttribute
+{
+    public int AttributeId { get; set; }
+    public byte DataTypeId { get; set; }
+    public string Name { get; set; }
+    public byte DisplayLength { get; set; }
+    public byte X { get; set; }
+    public byte Y { get; set; }
+}
+
+public class DatedValue
+{
+    public DateOnly Date { get; set; }
+    public Single Value { get; set; }
+}
+
+public class UserStarter
+{
+    public int MenuId { get; set; }
+    public int entityTypeId { get; set; }
+    public int indexTypeId { get; set; }
+}
+
+public class MenuItem
+{
+    public string Name { get; set; }
+    public IEnumerable<MenuItem> MenuItems { get; set; } = [];
+    public int? ScreenId { get; set; }
+}
