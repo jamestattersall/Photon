@@ -14,30 +14,30 @@ public class ProtonRepository(string connectionString)
     public UserStarter? TryLogin(HttpContext context, string pwd)
     {
         var encrypted = Decrypt(pwd);
-        return GetResult<UserStarter>(context, "SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
+        return GetResult<UserStarter>( "SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
             new { userCode = encrypted }).FirstOrDefault();
     }
 
-    public IEnumerable<ViewText> GetViewCaptions(HttpContext context, int viewId)
+    public IEnumerable<ViewText> GetViewCaptions( int viewId)
     {
 
-        return GetResult<ViewText>(context,
+        return GetResult<ViewText>(
             "SELECT Caption text, x,y FROM ViewCaptions WHERE ViewId=@viewId",
             new { ViewId = viewId }
         );
     }
 
-    public IEnumerable<ViewValue> GetViewValues(HttpContext context, int viewId, int entityId, int page=0)
+    public IEnumerable<ViewValue> GetViewValues( int viewId, int entityId, int page=0)
     {
-        return GetResult<ViewValue>(context,
+        return GetResult<ViewValue>(
             "SELECT Value text, x, y, dataTypeId, attributeId FROM GetViewValues(@viewId, @entityId, @page)",
             new { ViewId = viewId, EntityId=entityId, Page=page}
         );
     }
 
-    public IEnumerable<NumericAttribute> GetViewNumericAttributes(HttpContext context, int viewId)
+    public IEnumerable<NumericAttribute> GetViewNumericAttributes( int viewId)
     {
-        return GetResult<NumericAttribute>(context,
+        return GetResult<NumericAttribute>(
             @"
 SELECT AttributeId, a.Name, X, Y, DataTypeId, DisplayLength
 FROM ViewAttributes v 
@@ -50,32 +50,32 @@ AND a.DataTypeId IN (2,7)",
         );
     }
 
-    public IEnumerable<IndexType> GetIndexTypes(HttpContext context, int entityTypeId)
+    public IEnumerable<IndexType> GetIndexTypes( int entityTypeId)
     {
-        return GetResult<IndexType>(context,
+        return GetResult<IndexType>(
             "SELECT Id, Name FROM IndexTypes WHERE EntityTypeId=@EntityTypeId",
             new { EntityTypeId = entityTypeId }
         );
     }
-    public IEnumerable<EntityType> GetEntityTypes(HttpContext context)
+    public IEnumerable<EntityType> GetEntityTypes()
     {
-        var ets = GetResult<EntityType>(context,
+        var ets = GetResult<EntityType>(
             "SELECT Id, Name, DefaultIndexTypeId, idlineViewId FROM EntityTypes",
             new {  }
         );
 
         foreach(EntityType et in ets)
         {
-            et.IndexTypes = GetIndexTypes(context, et.Id);
-            et.Views = GetViews(context, et.Id);
+            et.IndexTypes = GetIndexTypes(et.Id);
+            et.Views = GetViews( et.Id);
         }
 
         return ets;
     }
    
-    public IEnumerable<View>GetViews(HttpContext context, int entityTypeId)
+    public IEnumerable<View>GetViews( int entityTypeId)
     {
-        var vs = GetResult<View>(context, @"
+        var vs = GetResult<View>( @"
 SELECT v.Id, v.Name, v.nRows
 FROM Views v
 INNER JOIN Tables t ON t.Id = v.TableId
@@ -87,16 +87,16 @@ ORDER BY v.Name",
 
         foreach(View v in vs)
         {
-            v.Captions = GetViewCaptions(context,v.Id);
-            v.NumericAttributes = GetViewNumericAttributes(context,v.Id);
+            v.Captions = GetViewCaptions(v.Id);
+            v.NumericAttributes = GetViewNumericAttributes(v.Id);
         }
 
         return vs;
     }
 
-    public IEnumerable<Index> GetIndexes(HttpContext context, int indexTypeId, int page = 0, int nRows = 16, string? searchterm="")
+    public IEnumerable<Index> GetIndexes( int indexTypeId, int page = 0, int nRows = 16, string? searchterm="")
     {
-        return GetResult<Index>(context,
+        return GetResult<Index>(
             @"
 SELECT Term, EntityId 
 FROM Indexes 
@@ -109,9 +109,9 @@ FETCH NEXT @Nrows ROWS ONLY",
         );
     }
 
-    public IEnumerable<DatedValue> GetDatedValues(HttpContext context, int entityId, short attributeId, int daysBack)
+    public IEnumerable<DatedValue> GetDatedValues( int entityId, short attributeId, int daysBack)
     {
-        return GetResult<DatedValue>(context, @"
+        return GetResult<DatedValue>( @"
 SELECT d.Value [date], n.Value 
 FROM ValueNumbers n
 INNER JOIN Attributes a on a.Id=n.AttributeId
@@ -125,25 +125,18 @@ ORDER BY d.Value desc
 
     }
 
-    private IEnumerable<T> GetResult<T>(HttpContext context, string sql, object parameters) {
-        IEnumerable<T> result = [];
-        WindowsIdentity user = (WindowsIdentity)context.User.Identity!;
+    private IEnumerable<T> GetResult<T>(string sql, object parameters) {
 
-        //impersonate Windows credentials of user making the request
-        //WindowsIdentity.RunImpersonated(user.AccessToken, () =>
-       // {
+        IEnumerable<T> result = [];
         using var cn = new SqlConnection(_connectionString);
         try
         {
-           // cn.Open();
-            result = cn.Query<T>(sql, parameters);
+            return cn.Query<T>(sql, parameters);
         }
         catch(Exception ex)
         {
             throw ( new Exception(ex.Message));
         }
-      //  });
-        return result;
     }
 
     private IEnumerable<T> GetResultSp<T>(string spName, object parameters)
@@ -153,23 +146,20 @@ ORDER BY d.Value desc
         return _db.Query<T>(spName, parameters, commandType: CommandType.StoredProcedure);
     }
 
-    public int NPages(HttpContext context, short viewId, int entityId)
+    public int NPages( short viewId, int entityId)
     {
         int res = 0;
 
-        WindowsIdentity user = (WindowsIdentity)context.User.Identity!;
-        WindowsIdentity.RunImpersonated(user.AccessToken, () =>
-        {
-            using var cn = new SqlConnection(_connectionString);
-           // cn.Open();
-            res = cn.ExecuteScalar<int>($@"
+        using var cn = new SqlConnection(_connectionString);
+    
+        res = cn.ExecuteScalar<int>($@"
 SELECT MAX(CEILING(CAST(d.seq AS FLOAT)/v.NRows)) AS NRows
 FROM Views v
 INNER JOIN Tables t ON t.Id=v.TableId
 INNER JOIN ValueDates d ON d.EntityId={entityId} AND d.AttributeId=t.DateAttributeId
 WHERE v.id={viewId}
 GROUP BY v.NRows");
-        });
+       
 
         return res;
 

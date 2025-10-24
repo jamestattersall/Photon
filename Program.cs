@@ -1,38 +1,40 @@
 using JwtAuthApp.JWT;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Hosting;
-using System;
-using System.Diagnostics;
 using TestJwt.Identity;
 using TestJwt.Model;
+using TestJwt.Swagger;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme)
-   .AddNegotiate();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+builder.Services.AddHttpContextAccessor();
 
-builder.Services.AddAuthorization(options =>
-{
-    // By default, all incoming requests will be authorized according to the default policy.
-    options.FallbackPolicy = options.DefaultPolicy;
-});
+var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfiguration>();
+builder.Services.AddSingleton(jwtConfig);
 
-//uncomment the 4 lines below to enable jwt
-//var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfiguration>();
-//builder.Services.AddSingleton(jwtConfig);
-//builder.Services.AddScoped<IdentityService>();
-//builder.Services.AddJwtAuthentication(jwtConfig);
+builder.Services.AddScoped<IdentityService>();
+builder.Services.AddJwtAuthentication(jwtConfig);
+builder.Services.AddSwaggerGen(SwaggerConfiguration.Configure);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.UseAuthentication();
+app.UseAuthorization();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.UseFileServer();
 app.UseStaticFiles();
 app.UseDefaultFiles("/index.html");
@@ -43,60 +45,60 @@ var connectionString = builder.Configuration.GetConnectionString("default");
 
 ProtonRepository repository = new(connectionString);
 
-app.MapGet("/TryLogin/{pwd}",(HttpContext context, string pwd) =>  repository.TryLogin(context, pwd)).RequireAuthorization();
+app.MapGet("/EntityTypes", () =>  
+    repository.GetEntityTypes()).RequireAuthorization(); ; 
 
-app.MapGet("/EntityTypes", (HttpContext context) =>  repository.GetEntityTypes(context)).RequireAuthorization();
+app.MapGet("/ViewValues/{viewId},{entityid},{page}", ( int viewId, int entityId, int page=0) =>
+    repository.GetViewValues( viewId, entityId, page)).RequireAuthorization();
 
-app.MapGet("/ViewValues/{viewId},{entityid},{page}", (HttpContext context, int viewId, int entityId, int page=0) =>
-    repository.GetViewValues(context, viewId, entityId, page)).RequireAuthorization();
+app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", ( int indexTypeId, string? searchterm, int page = 0, int nRows = 16) =>
+    repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
 
-app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", (HttpContext context, int indexTypeId, string? searchterm, int page = 0, int nRows = 16) =>
-    repository.GetIndexes(context, indexTypeId, page, nRows, searchterm)).RequireAuthorization();
+app.MapGet("/Indexes/{indexTypeId},{page},{nRows}", ( int indexTypeId, int page = 0, int nRows = 16, string searchterm="" ) =>
+    repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
 
-app.MapGet("/Indexes/{indexTypeId},{page},{nRows}", (HttpContext context, int indexTypeId, int page = 0, int nRows = 16, string searchterm="" ) =>
-    repository.GetIndexes(context, indexTypeId, page, nRows, searchterm)).RequireAuthorization();
+app.MapGet("/DatedValues/{entityId},{attributeId},{daysBack}", ( int entityId, short attributeId, int daysBack = int.MaxValue) =>
+    repository.GetDatedValues( entityId, attributeId, daysBack)).RequireAuthorization();
 
-app.MapGet("/DatedValues/{entityId},{attributeId},{daysBack}", (HttpContext context, int entityId, short attributeId, int daysBack = int.MaxValue) =>
-    repository.GetDatedValues(context, entityId, attributeId, daysBack)).RequireAuthorization();
+app.MapGet("/NPages/{viewId},{entityId}", (short viewId, int entityId) =>
+    repository.NPages( viewId, entityId)).RequireAuthorization();
 
-app.MapGet("/NPages/{viewId},{entityId}", (HttpContext context,  short viewId, int entityId) =>
-    repository.NPages(context, viewId, entityId)).RequireAuthorization();
+app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (LoginRequest request, IdentityService identityService, IConfiguration config, ILogger<Program> logger, HttpContext context) =>
+{
+    // Validate user credentials
+    if (string.IsNullOrWhiteSpace(request.Password))
+    {
+        logger.LogWarning("Login failed: Empty password.");
+        return Results.BadRequest(new { message = "password is required." });
+    }
+    if (context.User.Identity != null && context.User.Identity.IsAuthenticated)
+    {
+        var userName = context.User.Identity.Name;
+        var userStarter = repository.TryLogin(context, request.Password);
+        
+        if (userStarter == null)
+        {
+            logger.LogWarning("Login failed for user: {Username}", userName);
+            return Results.Unauthorized();
+        }
 
-//app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (LoginRequest request, IdentityService identityService, IConfiguration config, ILogger<Program> logger, HttpContext context) =>
-//{
-//    // Validate user credentials
-//    if (string.IsNullOrWhiteSpace(request.Password))
-//    {
-//        logger.LogWarning("Login failed: Empty password.");
-//        return Results.BadRequest(new { message = "password is required." });
-//    }
-//    if (context.User.Identity.IsAuthenticated)
-//    {
-//        var userStarter = repository.TryLogin(context, request.Password);
-//        var userIsAuthenticated = userStarter != null;
+        // Generate JWT token
+        var token = await identityService.GenerateToken(userName!);
 
-//        if (!userIsAuthenticated)
-//        {
-//            logger.LogWarning("Login failed for user: {Username}", context.User.Identity.Name);
-//            return Results.Unauthorized();
-//        }
+        logger.LogInformation("User {Username} authenticated successfully.", userName);
 
-//        // Generate JWT token
-//        var token = await identityService.GenerateToken(context.User.Identity.Name);
+        return Results.Ok(new LoginResponse
+        {
+            Message = "Login successful",
+            Token = token,
+            UserStarter = userStarter,
+            Username = userName
+        });
+    }
 
-//        logger.LogInformation("User {Username} authenticated successfully.", context.User.Identity.Name);
-
-//        return Results.Ok(new LoginResponse
-//        {
-//            Message = "Login successful",
-//            Token = token,
-//            UserStarter = userStarter
-//        });
-//    }
-
-//    logger.LogWarning("Windows Login failed");
-//    return Results.BadRequest(new { message = "User must be logged in to Windows." });
-//})
-//.RequireAuthorization();
+    logger.LogWarning("Windows Login failed");
+    return Results.BadRequest(new { message = "User must be logged in to Windows." });
+})
+.RequireAuthorization();
 
 app.Run();

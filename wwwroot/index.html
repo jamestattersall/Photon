@@ -30,7 +30,7 @@
             idValues: [],
             page: 0,
             nPages: 0,
-            isAuthenticated: false,
+            loginInfo: null,
             pwd: "",
             loginMessage: "",
             menuId: null,
@@ -46,8 +46,7 @@
             },
             // methods
             logout() {
-                this.pwd = ""
-                this.isAuthenticated = false;
+                this.loginInfo = null;
                 this.mode = 0;
             },
             tryLogin() {
@@ -58,28 +57,27 @@
                     return;
                 }
                 fetchWrapper
-                    .get('TryLogin/' + pwd)
-                    .then(data => {
-                        this.userStarter = data;
-                        if (data != null) {
-                            this.isAuthenticated = true;
-                            this.menuId = data.menuId
-                            fetchWrapper
-                                .get('EntityTypes')
-                                .then(data => {
-                                    this.entityTypes = data
-                                    this.setEntityType(this.entityTypes.find(e => e.id == 1))
-                                })
-                                .catch((error) => console.error(error));
-
+                    .post('login', { password: this.pwd})
+                    .then((values) => {
+                        if (values == null) {
+                            this.loginMessage='invalid password'
                         } else {
-                            this.isAuthenticated = false;
-                            this.loginMessage = "invalid password";
+                            this.idValues = values
+                            fetchWrapper.token=values.token
+                            this.getEntityTypes();
                         }
                     })
                     .catch((error) => console.error(error));
-
-
+               
+            },
+            getEntityTypes(){
+                fetchWrapper
+                    .get('EntityTypes')
+                    .then(data => {
+                        this.entityTypes = data
+                        this.setEntityType(this.entityTypes.find(e => e.id == 1))
+                    })
+                    .catch((error) =>  console.log('error1' + error));
             },
             setEntityType(entityType) {
                 this.entityType = entityType
@@ -195,16 +193,26 @@
         class FetchWrapper {
             constructor(baseUrl) {
                 this.baseUrl = baseUrl;
+                this.token=null;
             }
 
             async get(url) {
-                const response = await fetch(`${this.baseUrl}${url}`);
+             const response = await fetch(`${this.baseUrl}${url}`,
+                 {
+                     method: 'get',
+                     headers: {
+                         'Accept': 'application/json, text/plain, */*',
+                         'Content-Type': 'application/json',
+                         'Authorization': 'Bearer ' + this.token,
+                     }
+                 });
+             this.status = response.status;
+             if (!response.ok) {
+                throw new Error("Network response was not ok");
+             }
+             return response.json();
+         }
 
-                if (!response.ok) {
-                    throw new Error("Network response was not ok");
-                }
-                return response.json();
-            }
 
             async put(url, data) {
                 const response = await fetch(`${this.baseUrl}${url}`, {
@@ -214,6 +222,10 @@
                         'Content-Type': 'application/json',
                     },
                 });
+                if(!response.ok){
+                    console.log('not OK')
+                    console.log(response.status);
+                }
                 return response.json();
             }
 
@@ -225,6 +237,11 @@
                         'Content-Type': 'application/json',
                     },
                 });
+                if(!response.ok){
+                    console.log('not OK')
+                    console.log(response.status);
+                    return;
+                }
                 return response.json();
             }
 
@@ -237,7 +254,7 @@
         }
 
         const fetchWrapper = new FetchWrapper(window.origin + '/');
-
+        
 
     </script>
 </head>
@@ -303,7 +320,7 @@
 
 
     <svg viewBox="0 0 80 50" preserveAspectRatio="none" class="main"
-         xmlns="http://www.w3.org/2000/svg" font-size="1.7" v-show="isAuthenticated">
+         xmlns="http://www.w3.org/2000/svg" font-size="1.7" v-show="mode>0">
         <line x1="0" y1="3" x2="80" y2="3"></line>
         <line x1="0" y1="41" x2="80" y2="41"></line>
         <line x1="40" y1="41" x2="40" y2="50"></line>
@@ -323,7 +340,7 @@
         <text class="input" x="33" y="45" @click="logout">logout</text>
 
     </svg>
-    <svg v-show="!isAuthenticated" viewBox="0 0 800 500" preserveAspectRatio="none" class="login"
+    <svg v-show="mode==0" viewBox="0 0 800 500" preserveAspectRatio="none" class="login"
          font-size="17">
         <text x="20" y="60" class="caption">Proton password:</text>
         <foreignObject x="170" y="40" width="180" height="30">
