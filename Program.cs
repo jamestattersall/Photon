@@ -32,12 +32,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseAuthentication();
-app.UseAuthorization();
-
 app.UseFileServer();
 app.UseStaticFiles();
 app.UseDefaultFiles("/index.html");
+
 
 app.UseDeveloperExceptionPage();
 
@@ -54,14 +52,17 @@ app.MapGet("/ViewValues/{viewId},{entityid},{page}", ( int viewId, int entityId,
 app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", ( int indexTypeId, string? searchterm, int page = 0, int nRows = 16) =>
     repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
 
-app.MapGet("/Indexes/{indexTypeId},{page},{nRows}", ( int indexTypeId, int page = 0, int nRows = 16, string searchterm="" ) =>
+app.MapGet("/Indexes/{indexTypeId},{page},{nRows}",( int indexTypeId, int page = 0, int nRows = 16, string searchterm="" ) =>
     repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
 
-app.MapGet("/DatedValues/{entityId},{attributeId},{daysBack}", ( int entityId, short attributeId, int daysBack = int.MaxValue) =>
+app.MapGet("/DatedValues/{entityId},{attributeId},{daysBack}",( int entityId, short attributeId, int daysBack = int.MaxValue) =>
     repository.GetDatedValues( entityId, attributeId, daysBack)).RequireAuthorization();
 
 app.MapGet("/NPages/{viewId},{entityId}", (short viewId, int entityId) =>
     repository.NPages( viewId, entityId)).RequireAuthorization();
+
+app.MapGet("/Menu/{Id}", (short id) =>
+    repository.GetMenu(id)).RequireAuthorization();
 
 app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (LoginRequest request, IdentityService identityService, IConfiguration config, ILogger<Program> logger, HttpContext context) =>
 {
@@ -72,18 +73,19 @@ app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authe
         return Results.BadRequest(new { message = "password is required." });
     }
     if (context.User.Identity != null && context.User.Identity.IsAuthenticated)
-    {
+    { 
         var userName = context.User.Identity.Name;
-        var userStarter = repository.TryLogin(context, request.Password);
-        
+        var userStarter = repository.TryLogin( request.Password);
+
         if (userStarter == null)
         {
             logger.LogWarning("Login failed for user: {Username}", userName);
-            return Results.Unauthorized();
+            return Results.BadRequest(new { message = "Password does not match any in Proton." });
         }
+        userStarter.Menu = repository.GetMenu(userStarter.MenuId);
 
         // Generate JWT token
-        var token = await identityService.GenerateToken(userName!);
+        var token = identityService.GenerateToken(userName!);
 
         logger.LogInformation("User {Username} authenticated successfully.", userName);
 

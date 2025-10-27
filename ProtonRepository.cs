@@ -11,7 +11,7 @@ public class ProtonRepository(string connectionString)
 {
     private readonly string _connectionString = connectionString;
 
-    public UserStarter? TryLogin(HttpContext context, string pwd)
+    public UserStarter? TryLogin( string pwd)
     {
         var encrypted = Decrypt(pwd);
         return GetResult<UserStarter>( "SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
@@ -123,6 +123,38 @@ AND d.Value > dateAdd(dd,-@DaysBack,getdate())
 ORDER BY d.Value desc
 ", new {EntityId = entityId, AttributeId=attributeId, DaysBack=daysBack });
 
+    }
+
+    public Menu GetMenu(int menuId) { 
+        
+        using var cn = new SqlConnection(_connectionString);
+
+        using var multi = cn.QueryMultiple($@"
+SELECT Id, Name FROM Menus WHERE Id=@Id
+SELECT Seq, Name, [Function], Parameter1, NextMenuId, StartMenuId
+FROM MenuItems 
+WHERE MenuId=@Id
+AND (
+    [Function] IN('SCRN', 'CHGE', '1', '2', '3') 
+    OR (
+        [Function] = '' 
+        AND (
+                NextMenuId <> 0 
+                OR 
+                StartMenuId <> 0
+            )
+        )
+    )
+", new { Id = menuId, MenuId = menuId }) ;
+
+        Menu menu = multi.ReadFirst<Menu>();
+        menu.MenuItems = multi.Read<MenuItem>().ToList();
+
+        if (!menu.MenuItems.Any())
+        {
+            menu.MenuItems.Add(new MenuItem() { Function = "", Name = "Prev.Menu", NextMenuId = -2 });
+        }
+        return menu;
     }
 
     private IEnumerable<T> GetResult<T>(string sql, object parameters) {
@@ -253,11 +285,22 @@ public class UserStarter
     public int MenuId { get; set; }
     public int entityTypeId { get; set; }
     public int indexTypeId { get; set; }
+    public Menu? Menu { get; set; }
+}
+
+public class Menu
+{
+    public short Id { get; set; }
+    public string Name { get; set; }
+    public List<MenuItem> MenuItems { get; set; } = [];
 }
 
 public class MenuItem
 {
+    public byte Seq { get; set; }
     public string Name { get; set; }
-    public IEnumerable<MenuItem> MenuItems { get; set; } = [];
-    public int? ScreenId { get; set; }
+    public string Function { get; set; }
+    public int? Parameter1 { get; set; }
+    public int? NextMenuId  { get; set; }
+    public int? StartMenuId { get; set; }
 }

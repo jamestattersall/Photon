@@ -10,15 +10,14 @@ public class IdentityService(JwtConfiguration config)
 {
     private readonly JwtConfiguration _config = config;
 
-    public async Task<string> GenerateToken(string username)
+    public string GenerateToken(string userName)
     {
-        await Task.Delay(100); // simulate db call
 
         var claims = new[]
         {
-            new Claim(JwtRegisteredClaimNames.Sub, "123456"),
-            new Claim(JwtRegisteredClaimNames.Email, "admin@admin.gr"),
-            new Claim(JwtRegisteredClaimNames.PreferredUsername, username)
+            new Claim(JwtRegisteredClaimNames.Sub, "1453521r"),
+            new Claim(JwtRegisteredClaimNames.Email, "onoiew@win.ee"),
+            new Claim(JwtRegisteredClaimNames.PreferredUsername, userName)
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config.Secret));
