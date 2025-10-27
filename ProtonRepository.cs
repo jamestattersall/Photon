@@ -75,8 +75,8 @@ AND a.DataTypeId IN (2,7)",
    
     public IEnumerable<View>GetViews( int entityTypeId)
     {
-        var vs = GetResult<View>( @"
-SELECT v.Id, v.Name, v.nRows
+        var vs = GetResult<View>(@"
+SELECT v.Id, v.Name, v.nRows, case when t.DateAttributeId > 0 then 1 else 0 end as isDated
 FROM Views v
 INNER JOIN Tables t ON t.Id = v.TableId
 WHERE t.EntityTypeId = @entityTypeId
@@ -149,11 +149,6 @@ AND (
 
         Menu menu = multi.ReadFirst<Menu>();
         menu.MenuItems = multi.Read<MenuItem>().ToList();
-
-        if (!menu.MenuItems.Any())
-        {
-            menu.MenuItems.Add(new MenuItem() { Function = "", Name = "Prev.Menu", NextMenuId = -2 });
-        }
         return menu;
     }
 
@@ -260,6 +255,7 @@ public class View
     public int Id { get; set; }
     public string Name { get; set; }
     public byte nRows { get; set; }
+    public bool isDated { get; set; }
     public IEnumerable<ViewText> Captions { get; set; } = [];
     public IEnumerable<NumericAttribute> NumericAttributes { get; set; } = [];
 }

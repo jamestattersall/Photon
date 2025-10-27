@@ -208,7 +208,16 @@
                     }
                     fetchWrapper
                         .get('Menu/' + id)
-                        .then((data) => this.menu = data)
+                        .then((data) => {
+                            this.menu = data
+                            if (this.menu.menuItems.length == 0) {
+                                this.menu.menuItems.push({ "Name": "Prev. menu", "function": "", "seq": 3, "NextMenuId": -2, "StartMenuId": 0 })
+                                if (this.view.isDated) {
+                                    this.menu.menuItems.push({ "Name": "Up screen", "function": "2", "seq": 1, "NextMenuId": 0, "StartMenuId": 0 }) 
+                                    this.menu.menuItems.push({ "Name": "Down screen", "function": "3", "seq": 2, "NextMenuId": 0, "StartMenuId": 0 })
+                                }
+                            }
+                        })
                         .catch((error) => console.error(error));
                 }
             },
@@ -423,8 +432,8 @@
         <g v-show="menu !== null">
             <text class="caption" x="41" y="43">{{menu.name}}</text>
             <text class="input" v-for="i in menu.menuItems"
-                  :x="Math.floor(i.seq / 3) * 13 + 41"
-                  :y="(i.seq % 3) * 2 + 45" @click="doMenuItem(i)">{{i.name}}</text>
+                  :y="Math.floor(i.seq / 3) * 2 + 45"
+                  :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
             <text class="input" x="1" y="49" @click="setAdvanced">Advanced</text>
 
         </g>
