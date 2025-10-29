@@ -135,15 +135,9 @@ SELECT Seq, Name, [Function], Parameter1, NextMenuId, StartMenuId
 FROM MenuItems 
 WHERE MenuId=@Id
 AND (
-    [Function] IN('SCRN', 'CHGE', '1', '2', '3') 
-    OR (
-        [Function] = '' 
-        AND (
-                NextMenuId <> 0 
-                OR 
-                StartMenuId <> 0
-            )
-        )
+        [Function] IN('SCRN', 'CHGE', '1', '2', '3') 
+        OR NextMenuId <> 0 
+        OR StartMenuId <> 0
     )
 ", new { Id = menuId, MenuId = menuId }) ;
 
