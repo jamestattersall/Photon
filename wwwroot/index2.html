@@ -36,18 +36,7 @@
             row: 0,
             mode: 0,
             isAdvanced: false,
-            renderKey: 0,
-            isConfig: false,
-            attributeConfig: null,
-            lookupsPage: 0,
-            nextLookups() {
-                this.lookupsPage++
-                this.getLookups()
-            },
-            previousLookups() {
-                this.lookupsPage--
-                this.getLookups()
-            },
+            renderKey:0,
             get viewStart() {
                 return this.viewsPage * 19
             },
@@ -96,14 +85,6 @@
                     })
                     .catch((error) => console.log('error1' + error));
             },
-            getLookups() {
-                fetchWrapper
-                    .get('Lookups/' + this.attributeConfig.id + ',' + this.lookupsPage + ',14')
-                    .then(data => {
-                        this.attributeConfig.lookups = data
-                    })
-                    .catch((error) => console.log('error1' + error));
-            },
             setEntityType(entityType) {
                 if (entityType !== this.entityType) {
                     this.entityType = entityType
@@ -148,7 +129,7 @@
                 if (ix < this.indexes.length - 1) {
                     let newIndex = this.indexes[ix + 1]
                     this.setEntity(newIndex.entityId)
-                } else if (ix == 18) {
+                } else if(ix == 18) {
                     await this.getIndexNextPage()
                     if (this.indexes.some(Boolean)) {
                         this.setEntity(this.indexes[0].entityId)
@@ -190,29 +171,14 @@
                 }
             },
             graph(attributeId) {
-                if (this.isConfig) {
-                    this.mode=5
-                    this.getAttributeConfig(attributeId)
-                    return;
-                }
+                alert(attributeId);
             },
-            async getAttributeConfig(attributeId) {
-                fetchWrapper
-                    .get('AttributeConfig/' + attributeId)
-                    .then((data) => {
-                        this.attributeConfig = data
-                        this.lookupsPage=0
-                    })
-                    .catch((error) => console.error(error));
-            },
-
             async getMainValues() {
                 fetchWrapper
                     .get('ViewValues/' + this.view.id + ',' + this.entityId + ',' + this.page)
                     .then((values) => this.values = values)
                     .catch((error) => console.error(error));
             },
-
             async getIdValues() {
                 fetchWrapper
                     .get('ViewValues/' + this.entityType.idlineViewId + ',' + this.entityId + ',0')
@@ -389,7 +355,7 @@
                     case "PageDown":
                         this.nextPage()
                         return;
-                    case "Enter":
+                    case "Enter" :
                         this.goHome()
                         return;
                     case "HOME":
@@ -516,92 +482,76 @@
 
 <body v-scope="app" @keydown="keydown">
 
-    <svg viewBox="0 0 160 480" class="nav"  preserveAspectRatio="none" v-show="mode>0"
-         font-size="16.6666666">
+    <svg viewBox="0 0 160 480" class="nav" v-show="mode==1" preserveAspectRatio="none"
+         font-size="17">
 
         <line x1="160" y1="0" x2="160" y2="480"></line>
+        <text class="caption" x="10" y="20">Select {{entityType.name}}</text>
 
-        <g v-show="mode==1">
-            <text class="caption" x="10" y="20">Select {{entityType.name}}</text>
+        <foreignObject x="10" y="30" width="180" height="30">
+            <input type="text" v-model="indexSearch" width="170" autocomplete="off"
+                   @keyup.self="indexSearchChanged" @input="indexSearchChanged"
+                   placeholder="enter name" id="#searchEntity" />
+        </foreignObject>
 
-            <foreignObject x="10" y="30" width="180" height="30">
-                <input type="text" v-model="indexSearch" width="170" autocomplete="off"
-                       @keyup.self="indexSearchChanged" @input="indexSearchChanged"
-                       :placeholder="indexType.name" id="#searchEntity" />
-            </foreignObject>
+        <text v-for="(i, ix) in indexes" class="input"
+              x="10" :y="ix*20 + 80" v-bind:class="[(i.entityId == entityId) ? 'selected' : 'input']"
+              @click="setEntity(i.entityId)">{{i.term}}</text>
 
-            <text v-for="(i, ix) in indexes" class="input"
-                  x="10" :y="ix*20 + 80" v-bind:class="[(i.entityId == entityId) ? 'selected' : 'input']"
-                  @click="setEntity(i.entityId)">{{i.term}}</text>
+        <text class="caption clickable" @click="getIndexPreviousPage" x="10" y="470" v-show="indexesPage>0">&lt;BACK</text>
+        <text class="caption clickable" @click="getIndexNextPage" x="110" y="470" v-show="indexes.length==19">NEXT&gt;</text>
 
-            <text class="caption clickable" @click="getIndexPreviousPage" x="10" y="470" v-show="indexesPage>0">&lt;BACK</text>
-            <text class="caption clickable" @click="getIndexNextPage" x="110" y="470" v-show="indexes.length==19">NEXT&gt;</text>
+    </svg>
 
-        </g>
+    <svg viewBox="0 0 160 480" class="nav" v-show="mode==2" preserveAspectRatio="none"
+         font-size="17">
 
-        <g v-show="mode==2">
+        <line x1="160" y1="0" x2="160" y2="480"></line>
+        <text class="caption" x="10" y="20">Select view</text>
 
-            <text class="caption" x="10" y="20">Select view</text>
+        <foreignObject x="10" y="30" width="180" height="30">
+            <input type="text" v-model="viewSearch" @keyup="getViews"
+                   @input.self="getViews" width="170" autocomplete="off" placeholder="enter text" />
+        </foreignObject>
+        <text v-for="(v, ix) in views.slice(viewStart, viewEnd)" class="input"
+              x="10" :y="ix*20+80" v-bind:class="[(v == view) ? 'selected' : 'input']"
+              @click="setView(v)">
+            {{v.name}}
+        </text>
+        <text class="caption clickable" @click="viewsPage--" x="10" y="470" v-show="viewsPage>0">&lt;BACK</text>
+        <text class="caption clickable" @click="viewsPage++" x="110" y="470" v-show="(viewEnd<views.length)">NEXT&gt;</text>
+    </svg>
 
-            <foreignObject x="10" y="30" width="180" height="30">
-                <input type="text" v-model="viewSearch" @keyup="getViews"
-                        @input.self="getViews" width="170" autocomplete="off" placeholder="enter text" />
-            </foreignObject>
-            <text v-for="(v, ix) in views.slice(viewStart, viewEnd)" class="input"
-                    x="10" :y="ix*20+80" v-bind:class="[(v == view) ? 'selected' : 'input']"
-                    @click="setView(v)">
-                {{v.name}}
-            </text>
-            <text class="caption clickable" @click="viewsPage--" x="10" y="470" v-show="viewsPage>0">&lt;BACK</text>
-            <text class="caption clickable" @click="viewsPage++" x="110" y="470" v-show="(viewEnd<views.length)">NEXT&gt;</text>
-        </g>
+    <svg viewBox="0 0 160 480" class="nav" v-show="mode==3" preserveAspectRatio="none"
+         font-size="17">
 
-        <g v-show="mode==3" >
+        <line x1="160" y1="0" x2="160" y2="480"></line>
+        <text class="caption" x="10" y="20">Select entity type</text>
 
-            <text class="caption" x="10" y="20">Select entity type</text>
+        <text v-for="(t, index) in entityTypes" class="input"
+              x="10" :y="index*20 + 60" v-bind:class="[(t.id == entityType.id) ? 'selected' : 'input']"
+              @click="setEntityType(t)">{{t.name}}</text>
 
-            <text v-for="(t, index) in entityTypes" class="input"
-                    x="10" :y="index*20 + 60" v-bind:class="[(t.id == entityType.id) ? 'selected' : 'input']"
-                    @click="setEntityType(t)">{{t.name}}</text>
+    </svg>
 
-        </g>
+    <svg viewBox="0 0 160 480" class="nav" v-show="mode==4" preserveAspectRatio="none"
+         font-size="17">
 
-        <g v-show="mode==4">
+        <line x1="160" y1="0" x2="160" y2="480"></line>
+        <text class="caption" x="10" y="20">Select index type</text>
 
-            <text class="caption" x="10" y="20">Select index type</text>
+        <text v-for="(t, ix) in entityType.indexTypes.slice(indexTypePage * 19 , indexTypePage * 19 + 19)"
+              x="1" :y="ix*20 + 60" v-bind:class="[(t == indexType) ? 'selected' : 'input']"
+              @click="setIndexType(t)">{{t.name}}</text>
 
-            <text v-for="(t, ix) in entityType.indexTypes.slice(indexTypePage * 19 , indexTypePage * 19 + 19)"
-                    x="1" :y="ix*20 + 60" v-bind:class="[(t == indexType) ? 'selected' : 'input']"
-                    @click="setIndexType(t)">{{t.name}}</text>
+        <text class="caption clickable" @click="indexTypePage--" x="10" y="470" v-show="indexTypePage>0">&lt;BACK</text>
+        <text class="caption clickable" @click="indexTypePage++" x="110" y="470" v-show="(indexTypePage * 19 + 19 ) < entityType.indexTypes.length">NEXT&gt;</text>
 
-            <text class="caption clickable" @click="indexTypePage--" x="10" y="470" v-show="indexTypePage>0">&lt;BACK</text>
-            <text class="caption clickable" @click="indexTypePage++" x="110" y="470" v-show="(indexTypePage * 19 + 19 ) < entityType.indexTypes.length">NEXT&gt;</text>
+    </svg>
 
-        </g>
-        <g v-show="mode==5">
-            <text class="caption" x="10" y="20">{{attributeConfig.name}}</text>
-            <text class="caption" x="10" y="40">{{attributeConfig.id}}</text>
-            <text class="caption" x="10" y="60">{{attributeConfig.dataType}}</text>
-            <text class="caption" x="10" y="80">{{'max:' + attributeConfig.max}}</text>
-            <text class="caption" x="10" y="100">{{'min:' + attributeConfig.min}}</text>
-            <text class="caption" x="10" y="120">{{'quark:' + attributeConfig.quark}}</text>
-            <g v-show="attributeConfig.lookups.length > 0">
-                <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="10" :y="160+ix*20">{{l.name}}</text>
-
-                <text class="caption clickable" @click="previousLookups" x="10" y="470" v-show="lookupsPage>0">&lt;BACK</text>
-                <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups.length==14">NEXT&gt;</text>
-
-            </g>
-        </g>
-</svg>
-
-    <!--The main view. reprersenting a 5:3 aspect rato. 80 caracters wide
-        24 lines of characters, double line spacing = 48 characters high
-        monospace font also has 5:3 aspect ratio (1.6666)
-        set font size 1.66666 so character width=1/80 screen width  -->
 
     <svg viewBox="0 0 80 48" class="main" preserveAspectRatio="none"
-            font-size="1.6666666" v-show="mode>0">
+         xmlns="http://www.w3.org/2000/svg" font-size="1.7" v-show="mode>0">
         <line x1="0" y1="3" x2="80" y2="3"></line>
         <line x1="0" y1="41" x2="80" y2="41"></line>
         <line x1="40" y1="41" x2="40" y2="48"></line>
@@ -609,38 +559,28 @@
         <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2" v-html="viewCaption(c.text)"></text>
         <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
         <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
-        <rect v-for="a in view.viewAttributes" :height="(view.nRows) * 2 - 0.5" :width="a.displayLength" :class="[isConfig? 'config': 'clickable']"
-                :x="a.x" :y="(a.y)*2-1.25 " @click="graph(a.attributeId)" />
+        <rect v-for="a in view.viewAttributes" :height="view.nRows" :width="a.displayLength" class="clickable"
+              :x="a.x" :y="(a.y-1)*2" @click="graph(a.attributeId)" />
         <text v-show="nPages>1" class="value" x="26" y="43">{{page + 1}}/{{nPages}}</text>
         <g v-show="isAdvanced">
             <text :class="[(mode==1)? 'selected': 'input']" x="1" y="45" @click="mode=1">Select by {{indexType.name}}</text>
             <text :class="[(mode==2)? 'selected': 'input']" x="1" y="47" @click="mode=2">View</text>
             <text :class="[(mode==3)? 'selected': 'input']" x="17" y="47" @click="mode=3">Entity</text>
             <text :class="[(mode==4)? 'selected': 'input']" x="33" y="47" @click="mode=4">Index</text>
-            <g @click="isConfig=!isConfig" class="clickable">
-                <svg viewBox="0 0 100 100" x="17" y="41.9" width="1.2" height="1.2">
-
-                    <rect x="0" y="0" height="100" width="100" fill="white" stroke="black" stroke-width="5" />
-                    <polyline v-show="isConfig" points="0,50 40,100 100,0"
-                              style="fill:none;stroke:red;stroke-width:20" />
-                </svg>
-                <text x="19" y="43" :class="[(isConfig)? 'selected': 'input']" >config</text>
-            </g>
-
         </g>
         <text class="input" x="33" y="43" @click="logout">Logout</text>
         <text :class="[!isAdvanced? 'caption clickable': 'input']" x="33" y="45" @click="goHome">Home</text>
 
         <text class="caption" x="1" y="43">{{menu.name}}</text>
         <text :class="[i.isSelected? 'selected': 'input']" v-for="i in menu.menuItems"
-                :y="Math.floor(i.seq / 3) * 2 + 43"
-                :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
+              :y="Math.floor(i.seq / 3) * 2 + 43"
+              :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
 
         <text v-show="!isAdvanced" class="input" x="1" y="47" @click="setAdvanced">Advanced</text>
 
     </svg>
     <svg v-show="mode==0" viewBox="0 0 960 480" class="login" preserveAspectRatio="none"
-            font-size="17">
+         font-size="17">
         <text x="20" y="60" class="caption">Proton password:</text>
         <foreignObject x="170" y="40" width="180" height="30">
             <input type="password" v-model="pwd" width="170" autocomplete="off" @keydown.enter="tryLogin" />
@@ -697,20 +637,11 @@
             cursor: pointer;
         }
 
-        rect.config {
-            opacity: 0.2;
-            fill: aqua;
-            cursor: pointer;
-        }
-
         rect.clickable {
             opacity: 0;
             cursor: pointer;
         }
 
-        .clickable {
-            cursor: pointer;
-        }
         rect.button {
             fill: lightgray;
             stroke: black;

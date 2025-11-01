@@ -43,8 +43,11 @@ var connectionString = builder.Configuration.GetConnectionString("default");
 
 ProtonRepository repository = new(connectionString);
 
-app.MapGet("/EntityTypes", () =>  
-    repository.GetEntityTypes()).RequireAuthorization(); ; 
+app.MapGet("/EntityTypes",() =>  
+    repository.GetEntityTypes()).RequireAuthorization();
+
+app.MapGet("/AttributeConfig/{attributeId}", (int attributeId) =>
+    repository.GetAttributeConfig(attributeId)).RequireAuthorization();
 
 app.MapGet("/ViewValues/{viewId},{entityid},{page}", ( int viewId, int entityId, int page=0) =>
     repository.GetViewValues( viewId, entityId, page)).RequireAuthorization();
@@ -52,8 +55,8 @@ app.MapGet("/ViewValues/{viewId},{entityid},{page}", ( int viewId, int entityId,
 app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", ( int indexTypeId, string? searchterm, int page = 0, int nRows = 16) =>
     repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
 
-app.MapGet("/Indexes/{indexTypeId},{page},{nRows}",( int indexTypeId, int page = 0, int nRows = 16, string searchterm="" ) =>
-    repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
+app.MapGet("/lookups/{attributeId},{page},{nRows}", (int attributeId, int page, int nRows) =>
+    repository.GetLookups(attributeId, page, nRows)).RequireAuthorization();
 
 app.MapGet("/DatedValues/{entityId},{attributeId},{daysBack}",( int entityId, short attributeId, int daysBack = int.MaxValue) =>
     repository.GetDatedValues( entityId, attributeId, daysBack)).RequireAuthorization();

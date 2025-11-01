@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.Win32.SafeHandles;
+using System;
 using System.Data;
 using System.Formats.Asn1;
 using System.Net;
@@ -34,18 +35,52 @@ public class ProtonRepository(string connectionString)
             new { ViewId = viewId, EntityId=entityId, Page=page}
         );
     }
-
-    public IEnumerable<NumericAttribute> GetViewNumericAttributes( int viewId)
+    public AttributeConfig GetAttributeConfig(int attributeId)
     {
-        return GetResult<NumericAttribute>(
+        using var cn = new SqlConnection(_connectionString);
+
+        using var multi = cn.QueryMultiple(@$"
+SELECT a.Id,  a.Name, t.Name [DataType] , [Max], [Min], a.LookupTypeId, a.Quark
+FROM Attributes a 
+LEFT JOIN DataTypes t on t.Id=a.DataTypeId
+WHERE a.Id=@AttributeId
+
+SELECT top 14 l.Id, l.Name 
+FROM Attributes a
+INNER JOIN Lookups l on (a.LookupTypeId>0 AND l.LookupTypeId=a.LookupTypeId) OR (a.lookupTypeId=-1 AND l.id>=a.Min AND l.id <=a.max)
+WHERE a.Id=@attributeId
+",     new { AttributeId = attributeId });
+
+        AttributeConfig attributeConfig = multi.ReadFirst<AttributeConfig>();
+        attributeConfig.Lookups = multi.Read<IndexType>().ToList();
+        return attributeConfig;
+
+    }
+
+    public IEnumerable<IndexType> GetLookups(int attributeId, int page, int nRows)
+    {
+       return GetResult<IndexType>(
+            @"
+SELECT l.Id, l.Name 
+FROM Attributes a
+INNER JOIN Lookups l on (a.LookupTypeId>0 AND l.LookupTypeId=a.LookupTypeId) OR (a.lookupTypeId=-1 AND l.id>=a.Min AND l.id <=a.max)
+WHERE a.Id=@AttributeId
+ORDER BY l.Name
+OFFSET @StartRow ROWS 
+FETCH NEXT @NRows ROWS ONLY
+", 
+       new { AttributeId = attributeId, StartRow = page * nRows, NRows=nRows });
+    }
+
+    public IEnumerable<ViewAttribute> GetViewAttributes( int viewId)
+    {
+        return GetResult<ViewAttribute>(
             @"
 SELECT AttributeId, a.Name, X, Y, DataTypeId, DisplayLength
 FROM ViewAttributes v 
 INNER JOIN Attributes a ON a.Id=v.AttributeId
 INNER JOIN Tables t ON t.Id=a.TableId
-WHERE v.ViewId=@ViewId
-AND t.DateAttributeId > 0
-AND a.DataTypeId IN (2,7)",
+WHERE v.ViewId=@ViewId",
             new { ViewId = viewId }
         );
     }
@@ -57,6 +92,7 @@ AND a.DataTypeId IN (2,7)",
             new { EntityTypeId = entityTypeId }
         );
     }
+
     public IEnumerable<EntityType> GetEntityTypes()
     {
         var ets = GetResult<EntityType>(
@@ -88,7 +124,7 @@ ORDER BY v.Name",
         foreach(View v in vs)
         {
             v.Captions = GetViewCaptions(v.Id);
-            v.NumericAttributes = GetViewNumericAttributes(v.Id);
+            v.ViewAttributes = GetViewAttributes(v.Id);
         }
 
         return vs;
@@ -228,10 +264,20 @@ public class ViewValue
     public string Text { get; set; }
     public byte X { get; set; }
     public byte Y { get; set; }
-    public byte dataTypeId { get; set; }
-    public short attributeId { get; set; }
+    public short DataTypeId { get; set; }
+    public short AttributeId { get; set; }
 }
 
+public class AttributeConfig
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public string? DataType { get; set; }
+    public float? Max { get; set; }
+    public float? Min { get; set; }
+    public short? Quark { get; set; }
+    public IEnumerable<IndexType> Lookups { get; set; } = [];
+}
 public class Index
 {
     public string Term { get; set; }
@@ -251,10 +297,10 @@ public class View
     public byte nRows { get; set; }
     public bool isDated { get; set; }
     public IEnumerable<ViewText> Captions { get; set; } = [];
-    public IEnumerable<NumericAttribute> NumericAttributes { get; set; } = [];
+    public IEnumerable<ViewAttribute> ViewAttributes { get; set; } = [];
 }
 
-public class NumericAttribute
+public class ViewAttribute
 {
     public int AttributeId { get; set; }
     public byte DataTypeId { get; set; }
