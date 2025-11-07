@@ -40,7 +40,7 @@ public class ProtonRepository(string connectionString)
         using var cn = new SqlConnection(_connectionString);
 
         using var multi = cn.QueryMultiple(@$"
-SELECT a.Id,  a.Name, t.Name [DataType] , [Max], [Min], a.LookupTypeId, a.Quark
+SELECT a.Id,  a.Name, a.Comment, t.Name [DataType] , [Max], [Min], a.LookupTypeId, a.Quark
 FROM Attributes a 
 LEFT JOIN DataTypes t on t.Id=a.DataTypeId
 WHERE a.Id=@AttributeId
@@ -76,10 +76,9 @@ FETCH NEXT @NRows ROWS ONLY
     {
         return GetResult<ViewAttribute>(
             @"
-SELECT AttributeId, a.Name, X, Y, DataTypeId, DisplayLength
+SELECT AttributeId, a.Name, v.X, v.Y, a.DataTypeId, a.DisplayLength
 FROM ViewAttributes v 
 INNER JOIN Attributes a ON a.Id=v.AttributeId
-INNER JOIN Tables t ON t.Id=a.TableId
 WHERE v.ViewId=@ViewId",
             new { ViewId = viewId }
         );
@@ -272,6 +271,7 @@ public class AttributeConfig
 {
     public int Id { get; set; }
     public string Name { get; set; }
+    public string Comment { get; set; }
     public string? DataType { get; set; }
     public float? Max { get; set; }
     public float? Min { get; set; }

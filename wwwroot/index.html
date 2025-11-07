@@ -38,7 +38,7 @@
             isAdvanced: false,
             renderKey: 0,
             isConfig: false,
-            attributeConfig: null,
+            attributeConfig: { id: 0 },
             lookupsPage: 0,
             nextLookups() {
                 this.lookupsPage++
@@ -191,7 +191,7 @@
             },
             graph(attributeId) {
                 if (this.isConfig) {
-                    this.mode=5
+                    this.mode = 5
                     this.getAttributeConfig(attributeId)
                     return;
                 }
@@ -201,7 +201,7 @@
                     .get('AttributeConfig/' + attributeId)
                     .then((data) => {
                         this.attributeConfig = data
-                        this.lookupsPage=0
+                        this.lookupsPage = 0
                     })
                     .catch((error) => console.error(error));
             },
@@ -283,6 +283,7 @@
             },
             getMenu(id) {
                 if (id != this.menu.id) {
+                   
                     if (id == -2) {
                         if (this.menuHistory.some(Boolean)) {
                             this.menu = this.menuHistory.pop()
@@ -291,9 +292,15 @@
                         }
                         return
                     }
-                    if (!(this.menuHistory.some(Boolean) || this.menuHistory[this.menuHistory.length - 1] != this.menu || this.menu.id == 0)) {
+
+                    let lastMenu = this.menuHistory.some(Boolean) ? this.menuHistory[this.menuHistory.length - 1] : null;
+
+                    if (lastMenu == null ||
+                        lastMenu.id !== this.menu.id
+                    ) {
                         this.menuHistory.push(this.menu)
                     }
+
                     fetchWrapper
                         .get('Menu/' + id)
                         .then((data) => {
@@ -580,13 +587,14 @@
         </g>
         <g v-show="mode==5">
             <text class="caption" x="10" y="20">{{attributeConfig.name}}</text>
-            <text class="caption" x="10" y="40">{{attributeConfig.id}}</text>
-            <text class="caption" x="10" y="60">{{attributeConfig.dataType}}</text>
-            <text class="caption" x="10" y="80">{{'max:' + attributeConfig.max}}</text>
-            <text class="caption" x="10" y="100">{{'min:' + attributeConfig.min}}</text>
-            <text class="caption" x="10" y="120">{{'quark:' + attributeConfig.quark}}</text>
+            <text class="caption" x="10" y="40">{{attributeConfig.comment}}</text>
+            <text class="caption" x="10" y="60">{{attributeConfig.id}}</text>
+            <text class="caption" x="10" y="80">{{attributeConfig.dataType}}</text>
+            <text class="caption" x="10" y="100">{{'max:' + attributeConfig.max}}</text>
+            <text class="caption" x="10" y="120">{{'min:' + attributeConfig.min}}</text>
+            <text class="caption" x="10" y="140">{{'quark:' + attributeConfig.quark}}</text>
             <g v-show="attributeConfig.lookups.length > 0">
-                <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="10" :y="160+ix*20">{{l.name}}</text>
+                <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="10" :y="180+ix*20">{{l.name}}</text>
 
                 <text class="caption clickable" @click="previousLookups" x="10" y="470" v-show="lookupsPage>0">&lt;BACK</text>
                 <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups.length==14">NEXT&gt;</text>
@@ -609,8 +617,9 @@
         <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2" v-html="viewCaption(c.text)"></text>
         <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
         <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
-        <rect v-for="a in view.viewAttributes" :height="(view.nRows) * 2 - 0.5" :width="a.displayLength" :class="[isConfig? 'config': 'clickable']"
-                :x="a.x" :y="(a.y)*2-1.25 " @click="graph(a.attributeId)" />
+        <rect v-for="a in view.viewAttributes" :height="(view.nRows) * 2 - 0.33333" :width="a.displayLength" 
+              :class="[isConfig? a.attributeId==attributeConfig.id? 'selected':'config':  'clickable']"
+              :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a.attributeId)" />
         <text v-show="nPages>1" class="value" x="26" y="43">{{page + 1}}/{{nPages}}</text>
         <g v-show="isAdvanced">
             <text :class="[(mode==1)? 'selected': 'input']" x="1" y="45" @click="mode=1">Select by {{indexType.name}}</text>
@@ -702,7 +711,11 @@
             fill: aqua;
             cursor: pointer;
         }
-
+        rect.selected {
+            opacity: 0.2;
+            fill: red;
+            cursor: pointer;
+        }
         rect.clickable {
             opacity: 0;
             cursor: pointer;
