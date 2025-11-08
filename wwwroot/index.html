@@ -31,6 +31,7 @@
             userStarter: null,
             pwd: "",
             loginMessage: "",
+            loadMessage: "",
             menu: null,
             menuHistory: [],
             row: 0,
@@ -197,11 +198,13 @@
                 }
             },
             async getAttributeConfig(attributeId) {
+                this.loadMessage="loading.."
                 fetchWrapper
                     .get('AttributeConfig/' + attributeId)
                     .then((data) => {
                         this.attributeConfig = data
                         this.lookupsPage = 0
+                        this.loadMessage = null
                     })
                     .catch((error) => console.error(error));
             },
@@ -284,7 +287,7 @@
             getMenu(id) {
                 if (id != this.menu.id) {
                    
-                    if (id == -2) {
+                    if (id < 0) {
                         if (this.menuHistory.some(Boolean)) {
                             this.menu = this.menuHistory.pop()
                         } else {
@@ -354,11 +357,9 @@
                     default:
                     // code block
                 }
-                if (item.nextMenuId > 0 || item.nextMenuId == -2) {
-
+                if (item.nextMenuId !== 0) {
                     this.getMenu(item.nextMenuId)
-                }
-                if (item.startMenuId > 0) {
+                } else if (item.startMenuId !== 0) {
                     this.getMenu(item.startMenuId)
                 }
             },
@@ -585,23 +586,32 @@
             <text class="caption clickable" @click="indexTypePage++" x="110" y="470" v-show="(indexTypePage * 19 + 19 ) < entityType.indexTypes.length">NEXT&gt;</text>
 
         </g>
-        <g v-show="mode==5">
-            <text class="caption" x="10" y="20">{{attributeConfig.name}}</text>
-            <text class="caption" x="10" y="40">{{attributeConfig.comment}}</text>
-            <text class="caption" x="10" y="60">{{attributeConfig.id}}</text>
-            <text class="caption" x="10" y="80">{{attributeConfig.dataType}}</text>
-            <text class="caption" x="10" y="100">{{'max:' + attributeConfig.max}}</text>
-            <text class="caption" x="10" y="120">{{'min:' + attributeConfig.min}}</text>
-            <text class="caption" x="10" y="140">{{'quark:' + attributeConfig.quark}}</text>
-            <g v-show="attributeConfig.lookups.length > 0">
-                <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="10" :y="180+ix*20">{{l.name}}</text>
+        <g v-show="mode==5" font-size="12">
+            <g v-show="loadMessage">
+                <text>{{loadMessage}}</text>
+            </g>
+            <g v-else>
+                <text class="caption" x="2" y="20">View ID:{{view.id}}</text>
+                <text class="caption" x="2" y="40">{{attributeConfig.id}}:{{attributeConfig.name}}</text>
+                <text class="caption" x="2" y="60">{{attributeConfig.comment}}</text>
+                <text class="caption" x="2" y="80">{{attributeConfig.dataType}}</text>
+                <text class="caption" x="2" y="100">max:{{attributeConfig.max}} min:{{attributeConfig.min}}</text>
+                <text class="caption" x="2" y="120" v-show="attributeConfig.quark">Quark:{{attributeConfig.quark}}</text>
 
-                <text class="caption clickable" @click="previousLookups" x="10" y="470" v-show="lookupsPage>0">&lt;BACK</text>
-                <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups.length==14">NEXT&gt;</text>
+                <g v-show="attributeConfig.lookups.length > 0">
+                    <text class="caption" x="2" y="120">Lookup type:</text>
+                    <text class="caption" x="2" y="140">{{attributeConfig.lookupType}}</text>
+                    <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="2" :y="180+ix*20">{{l.name}}</text>
 
+                    <text class="caption clickable" @click="previousLookups" x="10" y="470" v-show="lookupsPage>0">&lt;BACK</text>
+                    <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups.length==14">NEXT&gt;</text>
+
+                </g>
+
+                
             </g>
         </g>
-</svg>
+    </svg>
 
     <!--The main view. reprersenting a 5:3 aspect rato. 80 caracters wide
         24 lines of characters, double line spacing = 48 characters high

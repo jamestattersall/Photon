@@ -40,9 +40,10 @@ public class ProtonRepository(string connectionString)
         using var cn = new SqlConnection(_connectionString);
 
         using var multi = cn.QueryMultiple(@$"
-SELECT a.Id,  a.Name, a.Comment, t.Name [DataType] , [Max], [Min], a.LookupTypeId, a.Quark
+SELECT a.Id,  a.Name, a.Comment, t.Name [DataType] , [Max], [Min], a.LookupTypeId, lt.Name LookupType, a.Quark
 FROM Attributes a 
 LEFT JOIN DataTypes t on t.Id=a.DataTypeId
+LEFT JOIN LookupTypes lt on lt.Id=a.LookupTypeId
 WHERE a.Id=@AttributeId
 
 SELECT top 14 l.Id, l.Name 
@@ -273,6 +274,7 @@ public class AttributeConfig
     public string Name { get; set; }
     public string Comment { get; set; }
     public string? DataType { get; set; }
+    public string? LookupType { get; set; }
     public float? Max { get; set; }
     public float? Min { get; set; }
     public short? Quark { get; set; }
