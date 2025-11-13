@@ -32,14 +32,15 @@
             pwd: "",
             loginMessage: "",
             loadMessage: "",
-            menu: null,
+            menu: { id:0, name: "", menuItems: [] },
             menuHistory: [],
             row: 0,
             mode: 0,
             isAdvanced: false,
-            renderKey: 0,
             isConfig: false,
             attributeConfig: { id: 0 },
+            attributeUse: new attributeUse(),
+            datedValues: [],
             lookupsPage: 0,
             nextLookups() {
                 this.lookupsPage++
@@ -81,7 +82,6 @@
                             this.userStarter = values.userStarter
                             fetchWrapper.token = values.token
                             this.getEntityTypes();
-                            this.goHome()
                             resetLoginTimer()
                         }
                     })
@@ -93,13 +93,14 @@
                     .get('EntityTypes')
                     .then(data => {
                         this.entityTypes = data
-                        this.setEntityType(this.entityTypes.find(e => e.id == 1))
+                        this.setEntityType(this.entityTypes.find(e => e.id == this.userStarter.entityTypeId))
+                        this.goHome()
                     })
                     .catch((error) => console.log('error1' + error));
             },
             getLookups() {
                 fetchWrapper
-                    .get('Lookups/' + this.attributeConfig.id + ',' + this.lookupsPage + ',14')
+                    .get('Lookups/' + this.attributeConfig.id + ',' + this.lookupsPage + ',20')
                     .then(data => {
                         this.attributeConfig.lookups = data
                     })
@@ -194,11 +195,12 @@
                 if (this.isConfig) {
                     this.mode = 5
                     this.getAttributeConfig(attributeId)
+                    this.getAttributeUse(attributeId)
                     return;
                 }
             },
             async getAttributeConfig(attributeId) {
-                this.loadMessage="loading.."
+                this.loadMessage = "loading.."
                 fetchWrapper
                     .get('AttributeConfig/' + attributeId)
                     .then((data) => {
@@ -209,6 +211,16 @@
                     .catch((error) => console.error(error));
             },
 
+            async getAttributeUse(attributeId) {
+                this.attributeUse = new attributeUse()
+                fetchWrapper
+                    .get('AttributeUse/' + attributeId)
+                    .then((data) => {
+                        this.attributeUse = data
+                        this.loadMessage = null
+                    })
+                    .catch((error) => console.error(error));
+            },
             async getMainValues() {
                 fetchWrapper
                     .get('ViewValues/' + this.view.id + ',' + this.entityId + ',' + this.page)
@@ -216,6 +228,12 @@
                     .catch((error) => console.error(error));
             },
 
+            async getDatedValues(attributeId, daysBack) {
+                fetchWrapper
+                    .get('DatedValues/' + this.entityId + ',' + attributeId + ',' + + daysBack)
+                    .then((values) => this.values = values)
+                    .catch((error) => console.error(error));
+            },
             async getIdValues() {
                 fetchWrapper
                     .get('ViewValues/' + this.entityType.idlineViewId + ',' + this.entityId + ',0')
@@ -234,7 +252,7 @@
                     return;
                 }
                 this.views = this.entityType.views;
-                this.renderKey++
+
             },
             indexSearchChanged() {
                 //debounce
@@ -286,7 +304,7 @@
             },
             getMenu(id) {
                 if (id != this.menu.id) {
-                   
+
                     if (id < 0) {
                         if (this.menuHistory.some(Boolean)) {
                             this.menu = this.menuHistory.pop()
@@ -320,7 +338,7 @@
                 }
             },
             goHome() {
-                this.menu = JSON.parse(JSON.stringify(this.userStarter.menu));
+                this.menu = this.userStarter.menu;
                 this.menuHistory = []
                 this.setEntityType(this.entityTypes.find(t => t.id == this.userStarter.entityTypeId))
                 this.setIndexType(this.entityType.indexTypes.find(t => t.id == this.userStarter.indexTypeId))
@@ -398,7 +416,7 @@
                         this.nextPage()
                         return;
                     case "Enter":
-                        this.goHome()
+                        if(this.mode>1) this.goHome()
                         return;
                     case "HOME":
                         this.goHome()
@@ -407,6 +425,7 @@
                         let timer = setTimeout(() => {
                             document.getElementById("#searchEntity").focus();
                         }, 500);
+                        this.mode = 1
                         return
                     default:
                 }
@@ -421,7 +440,7 @@
                 }
                 if (menuItem !== null) {
 
-                    document.getElementById("#searchEntity").blur();
+                    //document.getElementById("#searchEntity").blur();
                     this.doMenuItem(menuItem)
                 }
             },
@@ -518,13 +537,18 @@
 
         const fetchWrapper = new FetchWrapper(window.location);
 
+        function attributeUse() {
+            this.nEntities = "..."
+            this.perEntity = "..."
+            this.latest = "..."
+        }
 
     </script>
 </head>
 
 <body v-scope="app" @keydown="keydown">
 
-    <svg viewBox="0 0 160 480" class="nav"  preserveAspectRatio="none" v-show="mode>0"
+    <svg viewBox="0 0 160 480" class="nav"  preserveAspectRatio="none" v-if="mode>0"
          font-size="16.6666666">
 
         <line x1="160" y1="0" x2="160" y2="480"></line>
@@ -591,24 +615,28 @@
                 <text>{{loadMessage}}</text>
             </g>
             <g v-else>
-                <text class="caption" x="2" y="20">View ID:{{view.id}}</text>
-                <text class="caption" x="2" y="40">{{attributeConfig.id}}:{{attributeConfig.name}}</text>
-                <text class="caption" x="2" y="60">{{attributeConfig.comment}}</text>
-                <text class="caption" x="2" y="80">{{attributeConfig.dataType}}</text>
-                <text class="caption" x="2" y="100">max:{{attributeConfig.max}} min:{{attributeConfig.min}}</text>
-                <text class="caption" x="2" y="120" v-show="attributeConfig.quark">Quark:{{attributeConfig.quark}}</text>
+                <text class="caption" x="2" y="20">View ID: {{view.id}}</text>
+                <text class="caption" x="2" y="35">Attribute: {{attributeConfig.id}}: {{attributeConfig.name}}</text>
+                <text class="caption" x="2" y="50">{{attributeConfig.comment}}</text>
+                <text class="caption" x="2" y="65">max: {{attributeConfig.max}} min: {{attributeConfig.min}}</text>
+                <text class="caption" x="2" y="80">{{entityType.name}}s: {{attributeUse.nEntities}}</text>
+                <text class="caption" x="2" y="95">Per {{entityType.name}}: {{attributeUse.perEntity}}</text>
+                <text class="caption" x="2" y="110">Most recent: {{attributeUse.latest}}</text>
+                <text class="caption" x="2" y="125">Type: {{attributeConfig.dataType}}</text>
+
+                <text class="caption" x="2" y="140" v-show="attributeConfig.quark">Quark: {{attributeConfig.quark}}</text>
 
                 <g v-show="attributeConfig.lookups.length > 0">
-                    <text class="caption" x="2" y="120">Lookup type:</text>
-                    <text class="caption" x="2" y="140">{{attributeConfig.lookupType}}</text>
-                    <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="2" :y="180+ix*20">{{l.name}}</text>
+                    <text class="caption" x="2" y="140">Lookup type:</text>
+                    <text class="caption" x="2" y="155">{{attributeConfig.lookupType}}</text>
+                    <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="2" :y="170+ix*15">{{l.name}}</text>
 
                     <text class="caption clickable" @click="previousLookups" x="10" y="470" v-show="lookupsPage>0">&lt;BACK</text>
-                    <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups.length==14">NEXT&gt;</text>
+                    <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups.length==20">NEXT&gt;</text>
 
                 </g>
 
-                
+
             </g>
         </g>
     </svg>
@@ -619,7 +647,7 @@
         set font size 1.66666 so character width=1/80 screen width  -->
 
     <svg viewBox="0 0 80 48" class="main" preserveAspectRatio="none"
-            font-size="1.6666666" v-show="mode>0">
+            font-size="1.6666666" v-if="mode>0">
         <line x1="0" y1="3" x2="80" y2="3"></line>
         <line x1="0" y1="41" x2="80" y2="41"></line>
         <line x1="40" y1="41" x2="40" y2="48"></line>
@@ -658,7 +686,8 @@
         <text v-show="!isAdvanced" class="input" x="1" y="47" @click="setAdvanced">Advanced</text>
 
     </svg>
-    <svg v-show="mode==0" viewBox="0 0 960 480" class="login" preserveAspectRatio="none"
+
+    <svg v-if="mode==0" viewBox="0 0 960 480" class="login" preserveAspectRatio="none"
             font-size="17">
         <text x="20" y="60" class="caption">Proton password:</text>
         <foreignObject x="170" y="40" width="180" height="30">

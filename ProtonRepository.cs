@@ -8,18 +8,28 @@ using System.Net;
 using System.Security.Principal;
 using System.Text;
 
-public class ProtonRepository(string connectionString)
+public class ProtonRepository
 {
-    private readonly string _connectionString = connectionString;
-
-    public UserStarter? TryLogin( string pwd)
+    private readonly string _connectionString ;
+    public ProtonRepository(string connectionString)
     {
-        var encrypted = Decrypt(pwd);
-        return GetResult<UserStarter>( "SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
-            new { userCode = encrypted }).FirstOrDefault();
+        _connectionString = connectionString;
+        SqlMapper.AddTypeHandler(new SqlDateOnlyTypeHandler());
+        SqlMapper.AddTypeHandler(new SqlTimeOnlyTypeHandler());
     }
 
-    public IEnumerable<ViewText> GetViewCaptions( int viewId)
+
+    public UserStarter? TryLogin(string pwd)
+    {
+        var encrypted = Decrypt(pwd);
+        var userStarter = GetResult<UserStarter>("SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
+            new { userCode = encrypted }).FirstOrDefault();
+        if(userStarter != null) userStarter.Menu = GetMenu(userStarter.MenuId);
+
+        return userStarter;
+    }
+
+    public IEnumerable<ViewText> GetViewCaptions(int viewId)
     {
 
         return GetResult<ViewText>(
@@ -28,11 +38,11 @@ public class ProtonRepository(string connectionString)
         );
     }
 
-    public IEnumerable<ViewValue> GetViewValues( int viewId, int entityId, int page=0)
+    public IEnumerable<ViewValue> GetViewValues(int viewId, int entityId, int page = 0)
     {
         return GetResult<ViewValue>(
             "SELECT Value text, x, y, dataTypeId, attributeId FROM GetViewValues(@viewId, @entityId, @page)",
-            new { ViewId = viewId, EntityId=entityId, Page=page}
+            new { ViewId = viewId, EntityId = entityId, Page = page }
         );
     }
     public AttributeConfig GetAttributeConfig(int attributeId)
@@ -46,11 +56,11 @@ LEFT JOIN DataTypes t on t.Id=a.DataTypeId
 LEFT JOIN LookupTypes lt on lt.Id=a.LookupTypeId
 WHERE a.Id=@AttributeId
 
-SELECT top 14 l.Id, l.Name 
+SELECT top 20 l.Id, l.Name 
 FROM Attributes a
 INNER JOIN Lookups l on (a.LookupTypeId>0 AND l.LookupTypeId=a.LookupTypeId) OR (a.lookupTypeId=-1 AND l.id>=a.Min AND l.id <=a.max)
 WHERE a.Id=@attributeId
-",     new { AttributeId = attributeId });
+", new { AttributeId = attributeId });
 
         AttributeConfig attributeConfig = multi.ReadFirst<AttributeConfig>();
         attributeConfig.Lookups = multi.Read<IndexType>().ToList();
@@ -60,8 +70,8 @@ WHERE a.Id=@attributeId
 
     public IEnumerable<IndexType> GetLookups(int attributeId, int page, int nRows)
     {
-       return GetResult<IndexType>(
-            @"
+        return GetResult<IndexType>(
+             @"
 SELECT l.Id, l.Name 
 FROM Attributes a
 INNER JOIN Lookups l on (a.LookupTypeId>0 AND l.LookupTypeId=a.LookupTypeId) OR (a.lookupTypeId=-1 AND l.id>=a.Min AND l.id <=a.max)
@@ -69,11 +79,11 @@ WHERE a.Id=@AttributeId
 ORDER BY l.Name
 OFFSET @StartRow ROWS 
 FETCH NEXT @NRows ROWS ONLY
-", 
-       new { AttributeId = attributeId, StartRow = page * nRows, NRows=nRows });
+",
+        new { AttributeId = attributeId, StartRow = page * nRows, NRows = nRows });
     }
 
-    public IEnumerable<ViewAttribute> GetViewAttributes( int viewId)
+    public IEnumerable<ViewAttribute> GetViewAttributes(int viewId)
     {
         return GetResult<ViewAttribute>(
             @"
@@ -85,7 +95,7 @@ WHERE v.ViewId=@ViewId",
         );
     }
 
-    public IEnumerable<IndexType> GetIndexTypes( int entityTypeId)
+    public IEnumerable<IndexType> GetIndexTypes(int entityTypeId)
     {
         return GetResult<IndexType>(
             "SELECT Id, Name FROM IndexTypes WHERE EntityTypeId=@EntityTypeId",
@@ -97,19 +107,19 @@ WHERE v.ViewId=@ViewId",
     {
         var ets = GetResult<EntityType>(
             "SELECT Id, Name, DefaultIndexTypeId, idlineViewId FROM EntityTypes",
-            new {  }
+            new { }
         );
 
-        foreach(EntityType et in ets)
+        foreach (EntityType et in ets)
         {
             et.IndexTypes = GetIndexTypes(et.Id);
-            et.Views = GetViews( et.Id);
+            et.Views = GetViews(et.Id);
         }
 
         return ets;
     }
-   
-    public IEnumerable<View>GetViews( int entityTypeId)
+
+    public IEnumerable<View> GetViews(int entityTypeId)
     {
         var vs = GetResult<View>(@"
 SELECT v.Id, v.Name, v.nRows, case when t.DateAttributeId > 0 then 1 else 0 end as isDated
@@ -121,7 +131,7 @@ ORDER BY v.Name",
             new { EntityTypeId = entityTypeId }
         );
 
-        foreach(View v in vs)
+        foreach (View v in vs)
         {
             v.Captions = GetViewCaptions(v.Id);
             v.ViewAttributes = GetViewAttributes(v.Id);
@@ -130,7 +140,7 @@ ORDER BY v.Name",
         return vs;
     }
 
-    public IEnumerable<Index> GetIndexes( int indexTypeId, int page = 0, int nRows = 16, string? searchterm="")
+    public IEnumerable<Index> GetIndexes(int indexTypeId, int page = 0, int nRows = 16, string? searchterm = "")
     {
         return GetResult<Index>(
             @"
@@ -145,9 +155,9 @@ FETCH NEXT @Nrows ROWS ONLY",
         );
     }
 
-    public IEnumerable<DatedValue> GetDatedValues( int entityId, short attributeId, int daysBack)
+    public IEnumerable<DatedValue> GetDatedValues(int entityId, short attributeId, int daysBack)
     {
-        return GetResult<DatedValue>( @"
+        return GetResult<DatedValue>(@"
 SELECT d.Value [date], n.Value 
 FROM ValueNumbers n
 INNER JOIN Attributes a on a.Id=n.AttributeId
@@ -157,12 +167,12 @@ WHERE n.EntityId = @EntityId
 AND n.AttributeId = @AttributeId
 AND d.Value > dateAdd(dd,-@DaysBack,getdate())
 ORDER BY d.Value desc
-", new {EntityId = entityId, AttributeId=attributeId, DaysBack=daysBack });
+", new { EntityId = entityId, AttributeId = attributeId, DaysBack = daysBack });
 
     }
 
-    public Menu GetMenu(int menuId) { 
-        
+    public Menu GetMenu(int menuId) {
+
         using var cn = new SqlConnection(_connectionString);
 
         using var multi = cn.QueryMultiple($@"
@@ -170,16 +180,31 @@ SELECT Id, Name FROM Menus WHERE Id=@Id
 SELECT Seq, Name, [Function], Parameter1, NextMenuId, StartMenuId
 FROM MenuItems 
 WHERE MenuId=@Id
+AND Seq < 9
+AND LEN([Name]) > 0
 AND (
         [Function] IN('SCRN', 'CHGE', '1', '2', '3') 
         OR NextMenuId <> 0 
         OR StartMenuId <> 0
     )
-", new { Id = menuId, MenuId = menuId }) ;
+",
+        new { Id = menuId, MenuId = menuId });
 
         Menu menu = multi.ReadFirst<Menu>();
         menu.MenuItems = multi.Read<MenuItem>().ToList();
         return menu;
+    }
+
+    public AttributeUse? GetAttributeUse(int attributeId)
+    {
+        using var cn = new SqlConnection(_connectionString);
+
+        var parameters = new DynamicParameters();
+        parameters.Add("@AttributeId", attributeId);
+
+        var res=cn.QuerySingleOrDefault<AttributeUse>("AttributeUse", parameters, commandType: CommandType.StoredProcedure);
+        return res;
+        
     }
 
     private IEnumerable<T> GetResult<T>(string sql, object parameters) {
@@ -280,6 +305,14 @@ public class AttributeConfig
     public short? Quark { get; set; }
     public IEnumerable<IndexType> Lookups { get; set; } = [];
 }
+
+public class AttributeUse
+{
+    public int NEntities { get; set; }
+    public DateOnly Latest { get; set; }
+    public int PerEntity { get; set; }
+}
+
 public class Index
 {
     public string Term { get; set; }
@@ -315,7 +348,7 @@ public class ViewAttribute
 public class DatedValue
 {
     public DateOnly Date { get; set; }
-    public Single Value { get; set; }
+    public float Value { get; set; }
 }
 
 public class UserStarter
@@ -341,4 +374,21 @@ public class MenuItem
     public int? Parameter1 { get; set; }
     public int? NextMenuId  { get; set; }
     public int? StartMenuId { get; set; }
+}
+
+public class SqlDateOnlyTypeHandler : SqlMapper.TypeHandler<DateOnly>
+{
+    public override void SetValue(IDbDataParameter parameter, DateOnly date)
+        => parameter.Value = date.ToDateTime(new TimeOnly(0, 0));
+    public override DateOnly Parse(object value) => DateOnly.FromDateTime((DateTime)value);
+}
+
+public class SqlTimeOnlyTypeHandler : SqlMapper.TypeHandler<TimeOnly>
+{
+    public override void SetValue(IDbDataParameter parameter, TimeOnly time)
+    {
+        parameter.Value = time.ToString();
+    }
+
+    public override TimeOnly Parse(object value) => TimeOnly.FromTimeSpan((TimeSpan)value);
 }

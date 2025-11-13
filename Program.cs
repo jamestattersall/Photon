@@ -49,6 +49,9 @@ app.MapGet("/EntityTypes",() =>
 app.MapGet("/AttributeConfig/{attributeId}", (int attributeId) =>
     repository.GetAttributeConfig(attributeId)).RequireAuthorization();
 
+app.MapGet("/AttributeUse/{attributeId}", (int attributeId) =>
+    repository.GetAttributeUse(attributeId)).RequireAuthorization();
+
 app.MapGet("/ViewValues/{viewId},{entityid},{page}", ( int viewId, int entityId, int page=0) =>
     repository.GetViewValues( viewId, entityId, page)).RequireAuthorization();
 
