@@ -10,6 +10,154 @@
     <script type="module">
         import { createApp, reactive } from 'https://unpkg.com/petite-vue?module'
 
+        function graph(dateSeries, trueZero, svgHeight, svgWidth) {
+            const ms = 24 * 60 * 60 * 1000; //milliseconds in a day
+            const result = {
+                plotPath: "",
+                yCaptions: [],
+                xCaptions1: [],
+                xCaptions2: []
+            }
+            let daySeries = dateSeries.map((p) => new Date(p.date) / ms);
+            let valueSeries = dateSeries.map((p) => p.value);
+            let dayMin = Math.min.apply(Math, daySeries);
+            let dayMax = Math.max.apply(Math, daySeries);
+
+            let avg = mean(valueSeries)
+            let sd = stdDev(valueSeries, avg)
+            let yMax = avg + sd * 3;
+            let yMin = avg - sd * 3;
+            if (trueZero || (yMin > sd)) {
+                yMin == 0;
+            }
+
+            let dayRange = dayMax - dayMin;
+
+            let xScale = svgWidth / dayRange;
+            let yScale = svgHeight / (yMax - yMin);
+
+            for (var i = 0; i < daySeries.length; i++) {
+                result.plotPath += toX(daySeries[i]) + "," + toY(valueSeries[i]) + " "
+            }
+
+            let yInterval = interval(yMax - yMin, 10.0);
+
+            for (let y = 0; y <= yMax; y += yInterval) {
+                if (y >= yMin) result.yCaptions.push({ text: Math.round(y * 100) / 100, y: toY(y) });
+            }
+
+            // x axis captionns
+            let dateMin = new Date(dateSeries[0].date);
+            let dateMax = new Date(dateSeries[dateSeries.length - 1].date);
+            let yearMin = dateMin.getFullYear();
+            let yearMax = dateMax.getFullYear();
+            let yearRange = yearMax - yearMin;
+            let monthRange = yearMax * 12 + dateMax.getMonth() - (yearMin * 12 + dateMin.getMonth());
+
+            if (monthRange < 5) {
+                let incr = Math.floor(interval(dayRange, 10));
+                if (incr < 1) incr = 1;
+                let d = dateMin
+                while (d < dateMax) {
+                    result.xCaptions1.push({ text: d.getDate(), x: toX(d.getTime() / ms) });
+                    d = new Date(d.getTime() + incr * ms);
+                }
+                result.xCaptions2 = monthCaptions({ month: "short", year: "numeric" });
+                if (
+                    result.xCaptions2.length == 0 ||
+                    result.xCaptions2[0].x > svgWidth / 5
+                ) {
+                    result.xCaptions2.push({
+                        text: dateMin.toLocaleDateString("default", { month: "short", year: "numeric" }), x: 0
+                    });
+                }
+            } else if (yearRange < 5) {
+                result.xCaptions1 = monthCaptions({ month: "short" });
+                result.xCaptions2 = yearCaptions();
+                if (
+                    result.xCaptions2.length == 0 ||
+                    result.xCaptions2[0].x > svgWidth / 5
+                ) {
+                    result.xCaptions2.push({ text: yearMin, x: 0 });
+                }
+            } else {
+                result.xCaptions1 = yearCaptions();
+            }
+
+            return result
+
+            function monthCaptions(format) {
+                let capts = [];
+                if (monthRange > 0) {
+                    let d = new Date(yearMin, 0);
+                    let incr = Math.floor(interval(monthRange, 10, [12, 6, 3, 2, 1]));
+                    if (incr < 1) incr = 1;
+                    while (d < dateMax) {
+                        if (d >= dateMin) {
+                            capts.push({
+                                text: d.toLocaleDateString("default", format),
+                                x: toX(d.getTime() / ms),
+                            });
+                        }
+                        let m = d.getMonth() + incr;
+                        let y = d.getFullYear();
+                        if (m > 12) {
+                            y += Math.floor(m / 12);
+                            m = m % 12;
+                        }
+                        d = new Date(y, m);
+                    }
+                }
+                return capts;
+            }
+
+            function yearCaptions() {
+                let capts = [];
+                if (yearRange > 0) {
+                    let incr = Math.floor(interval(yearRange, 10));
+                    if (incr < 1) incr = 1;
+                    let d = new Date(yearMin, 0);
+                    while (d < dateMax) {
+                        if (d >= dateMin) {
+                            capts.push({ text: d.getFullYear(), x: toX(d.getTime() / ms) });
+                        }
+                        d = new Date(d.getFullYear() + incr, 0);
+                    }
+                }
+                return capts;
+            }
+
+            function interval(range, steps, defaults = [10, 5, 2, 1]) {
+                var tempStep = range / steps;
+                var magPow = Math.pow(10.0, Math.floor(Math.log10(tempStep)));
+                var magMsd = Math.round(tempStep / magPow + 0.5);
+                for (var i = 0; i < defaults.length - 1; i++) {
+                    if (magMsd > defaults[i + 1]) {
+                        magMsd = defaults[i];
+                        break;
+                    }
+                }
+                return magMsd * magPow;
+            }
+
+            function toX(day) {
+                return (day - dayMin) * xScale;
+            }
+
+            function toY(val) {
+                return svgHeight - (val - yMin) * yScale;
+            }
+
+            function mean(arr) {
+                return arr.reduce((acc, val) => acc + val, 0) / arr.length;
+            }
+
+            function stdDev(arr, mean) {
+                return arr.reduce((acc, val) => acc + Math.abs(val - mean), 0) / arr.length;
+            };
+
+        }
+
         const app = reactive({
 
             entityType: {},
@@ -32,7 +180,7 @@
             pwd: "",
             loginMessage: "",
             loadMessage: "",
-            menu: { id:0, name: "", menuItems: [] },
+            menu: { id: 0, name: "", menuItems: [] },
             menuHistory: [],
             row: 0,
             mode: 0,
@@ -42,6 +190,14 @@
             attributeUse: new attributeUse(),
             datedValues: [],
             lookupsPage: 0,
+            graphAttribute: null,
+            plotPath: "",
+            yCaptions: [],
+            xCaptions1: [],
+            xCaptions2: [],
+            svgHeight: 34,
+            svgWidth: 70,
+            trueZero: false,
             nextLookups() {
                 this.lookupsPage++
                 this.getLookups()
@@ -191,13 +347,34 @@
                     this.getMainValues()
                 }
             },
-            graph(attributeId) {
+            graph(a) {
                 if (this.isConfig) {
                     this.mode = 5
-                    this.getAttributeConfig(attributeId)
-                    this.getAttributeUse(attributeId)
+                    this.getAttributeConfig(a.attributeId)
+                    this.getAttributeUse(a.attributeId)
+
                     return;
+                } else {
+                    this.getDatedValues(a)
+                    
                 }
+            },
+            async getDatedValues(a, daysBack = 0) {
+                fetchWrapper
+                    .get('DatedValues/' + this.entityId + ',' + a.attributeId + ',' + daysBack)
+                    .then((values) => {
+                        if (values.length > 1) {
+
+                            let res = graph(values, this.trueZero, this.svgHeight, this.svgWidth)      
+                        
+                            this.plotPath = res.plotPath
+                            this.yCaptions = res.yCaptions
+                            this.xCaptions1 = res.xCaptions1
+                            this.xCaptions2 = res.xCaptions2
+                            this.graphAttribute = a
+                        }
+                    })
+                    .catch((error) => console.error(error));
             },
             async getAttributeConfig(attributeId) {
                 this.loadMessage = "loading.."
@@ -228,12 +405,6 @@
                     .catch((error) => console.error(error));
             },
 
-            async getDatedValues(attributeId, daysBack) {
-                fetchWrapper
-                    .get('DatedValues/' + this.entityId + ',' + attributeId + ',' + + daysBack)
-                    .then((values) => this.values = values)
-                    .catch((error) => console.error(error));
-            },
             async getIdValues() {
                 fetchWrapper
                     .get('ViewValues/' + this.entityType.idlineViewId + ',' + this.entityId + ',0')
@@ -263,6 +434,7 @@
             },
             setView(view) {
                 this.view = view
+                this.graphAttribute = null
                 this.page = 0
                 if (this.view.isDated && this.menu.menuItems.length === 0) {
                     this.menu.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
@@ -292,6 +464,9 @@
                     if (this.view.id > 0) {
                         this.getMainValues()
                         this.getNPages()
+                        if (graphAttribute) {
+                            getDatedValues(graphAttribute)
+                        }
                         return
                     }
                 }
@@ -345,6 +520,7 @@
                 this.mode = 1
                 this.viewSearch = ""
                 this.isAdvanced = false
+                this.graphAttribute = null
             },
             doMenuItem(item) {
                 item.isSelected = true
@@ -416,7 +592,7 @@
                         this.nextPage()
                         return;
                     case "Enter":
-                        if(this.mode>1) this.goHome()
+                        if (this.mode > 1) this.goHome()
                         return;
                     case "HOME":
                         this.goHome()
@@ -548,11 +724,13 @@
 
 <body v-scope="app" @keydown="keydown">
 
-    <svg viewBox="0 0 160 480" class="nav"  preserveAspectRatio="none" v-if="mode>0"
+    <!--The tools view  -->
+    <svg viewBox="0 0 160 480" class="nav" preserveAspectRatio="none" v-if="mode>0"
          font-size="16.6666666">
 
         <line x1="160" y1="0" x2="160" y2="480"></line>
 
+        <!--select entity  -->
         <g v-show="mode==1">
             <text class="caption" x="10" y="20">Select {{entityType.name}}</text>
 
@@ -571,30 +749,31 @@
 
         </g>
 
+        <!--select view  -->
         <g v-show="mode==2">
 
             <text class="caption" x="10" y="20">Select view</text>
 
             <foreignObject x="10" y="30" width="180" height="30">
                 <input type="text" v-model="viewSearch" @keyup="getViews"
-                        @input.self="getViews" width="170" autocomplete="off" placeholder="enter text" />
+                       @input.self="getViews" width="170" autocomplete="off" placeholder="enter text" />
             </foreignObject>
             <text v-for="(v, ix) in views.slice(viewStart, viewEnd)" class="input"
-                    x="10" :y="ix*20+80" v-bind:class="[(v == view) ? 'selected' : 'input']"
-                    @click="setView(v)">
+                  x="10" :y="ix*20+80" v-bind:class="[(v == view) ? 'selected' : 'input']"
+                  @click="setView(v)">
                 {{v.name}}
             </text>
             <text class="caption clickable" @click="viewsPage--" x="10" y="470" v-show="viewsPage>0">&lt;BACK</text>
             <text class="caption clickable" @click="viewsPage++" x="110" y="470" v-show="(viewEnd<views.length)">NEXT&gt;</text>
         </g>
 
-        <g v-show="mode==3" >
+        <g v-show="mode==3">
 
             <text class="caption" x="10" y="20">Select entity type</text>
 
             <text v-for="(t, index) in entityTypes" class="input"
-                    x="10" :y="index*20 + 60" v-bind:class="[(t.id == entityType.id) ? 'selected' : 'input']"
-                    @click="setEntityType(t)">{{t.name}}</text>
+                  x="10" :y="index*20 + 60" v-bind:class="[(t.id == entityType.id) ? 'selected' : 'input']"
+                  @click="setEntityType(t)">{{t.name}}</text>
 
         </g>
 
@@ -603,13 +782,15 @@
             <text class="caption" x="10" y="20">Select index type</text>
 
             <text v-for="(t, ix) in entityType.indexTypes.slice(indexTypePage * 19 , indexTypePage * 19 + 19)"
-                    x="1" :y="ix*20 + 60" v-bind:class="[(t == indexType) ? 'selected' : 'input']"
-                    @click="setIndexType(t)">{{t.name}}</text>
+                  x="1" :y="ix*20 + 60" v-bind:class="[(t == indexType) ? 'selected' : 'input']"
+                  @click="setIndexType(t)">{{t.name}}</text>
 
             <text class="caption clickable" @click="indexTypePage--" x="10" y="470" v-show="indexTypePage>0">&lt;BACK</text>
             <text class="caption clickable" @click="indexTypePage++" x="110" y="470" v-show="(indexTypePage * 19 + 19 ) < entityType.indexTypes.length">NEXT&gt;</text>
 
         </g>
+
+        <!--attribute config view  -->
         <g v-show="mode==5" font-size="12">
             <g v-show="loadMessage">
                 <text>{{loadMessage}}</text>
@@ -647,18 +828,56 @@
         set font size 1.66666 so character width=1/80 screen width  -->
 
     <svg viewBox="0 0 80 48" class="main" preserveAspectRatio="none"
-            font-size="1.6666666" v-if="mode>0">
+         font-size="1.6666666" v-if="mode>0">
         <line x1="0" y1="3" x2="80" y2="3"></line>
         <line x1="0" y1="41" x2="80" y2="41"></line>
         <line x1="40" y1="41" x2="40" y2="48"></line>
         <line x1="0" y1="0" x2="0" y2="48"></line>
-        <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2" v-html="viewCaption(c.text)"></text>
         <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
-        <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
-        <rect v-for="a in view.viewAttributes" :height="(view.nRows) * 2 - 0.33333" :width="a.displayLength" 
-              :class="[isConfig? a.attributeId==attributeConfig.id? 'selected':'config':  'clickable']"
-              :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a.attributeId)" />
-        <text v-show="nPages>1" class="value" x="26" y="43">{{page + 1}}/{{nPages}}</text>
+        
+        <g v-show="!graphAttribute">
+            <!--Tabular area-->
+            <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2" v-html="viewCaption(c.text)"></text>
+            <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
+            <rect v-for="a in view.viewAttributes" :height="(view.nRows) * 2 - 0.33333" :width="a.displayLength"
+                  :class="[isConfig? a.attributeId==attributeConfig.id? 'selected':'config':  'clickable']"
+                  :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a)" />
+            <text v-show="nPages>1" class="value" x="26" y="43">{{page + 1}}/{{nPages}}</text>
+            <text class="caption" x="1" y="43">{{menu.name}}</text>
+            <text :class="[i.isSelected? 'selected': 'input']" v-for="i in menu.menuItems"
+                  :y="Math.floor(i.seq / 3) * 2 + 43"
+                  :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
+        </g>
+        <g v-show="graphAttribute">
+            <!-- plot area -->
+            <svg :view-box.camel="'0 0 ' + svgWidth + ' ' + svgHeight" x="10" y="3" height="34" width="70" class="plotArea" preserveAspectRatio="none">
+                <polyline :points="plotPath" />
+                <!-- gridlines -->
+                <line v-for="c in yCaptions" :y1="c.y" :y2="c.y" x1="0" x2="70"></line>
+                <line v-for="c in xCaptions1" y1="0" y2="34" :x1="c.x" :x2="c.x"></line>
+                <text class="caption" x="10" y="3">{{graphAttribute.name}}</text>
+            </svg>
+            <!-- Y scale -->
+            <svg x="0" y="3" height="34" width="10" viewBox="0 0 10 34" class="axis" preserveAspectRatio="none">
+                <text class="value" text-anchor="end" v-for="c in yCaptions" :y="c.y" x="9.8">
+                    {{c.text}}
+                </text>
+            </svg>
+            <!-- X scale -->
+            <svg x="10" y="37" width="70" height="4" viewBox="0 0 70 4" class="axis" preserveAspectRatio="none">
+                <text class="value" v-for="c1 in xCaptions1" y="1.6" :x="c1.x">
+                    {{c1.text}}
+                </text>
+                <text class="value" v-for="c2 in xCaptions2" y="3.6" :x="c2.x">
+                    {{c2.text}}
+                </text>
+                <line v-for="c in xCaptions2" y1="0" y2="4" :x1="c.x" :x2="c.x"></line>
+            </svg>
+
+            <text class="caption" x="41" y="43">Graphing {{graphAttribute.name}}</text>
+            <text class="input" x="41" y="45" @click="graphAttribute=null">Finished</text>
+        </g>
+        
         <g v-show="isAdvanced">
             <text :class="[(mode==1)? 'selected': 'input']" x="1" y="45" @click="mode=1">Select by {{indexType.name}}</text>
             <text :class="[(mode==2)? 'selected': 'input']" x="1" y="47" @click="mode=2">View</text>
@@ -671,24 +890,22 @@
                     <polyline v-show="isConfig" points="0,50 40,100 100,0"
                               style="fill:none;stroke:red;stroke-width:20" />
                 </svg>
-                <text x="19" y="43" :class="[(isConfig)? 'selected': 'input']" >config</text>
+                <text x="19" y="43" :class="[(isConfig)? 'selected': 'input']">config</text>
             </g>
 
         </g>
         <text class="input" x="33" y="43" @click="logout">Logout</text>
         <text :class="[!isAdvanced? 'caption clickable': 'input']" x="33" y="45" @click="goHome">Home</text>
 
-        <text class="caption" x="1" y="43">{{menu.name}}</text>
-        <text :class="[i.isSelected? 'selected': 'input']" v-for="i in menu.menuItems"
-                :y="Math.floor(i.seq / 3) * 2 + 43"
-                :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
+
 
         <text v-show="!isAdvanced" class="input" x="1" y="47" @click="setAdvanced">Advanced</text>
 
     </svg>
 
+    <!-- log in -->
     <svg v-if="mode==0" viewBox="0 0 960 480" class="login" preserveAspectRatio="none"
-            font-size="17">
+         font-size="17">
         <text x="20" y="60" class="caption">Proton password:</text>
         <foreignObject x="170" y="40" width="180" height="30">
             <input type="password" v-model="pwd" width="170" autocomplete="off" @keydown.enter="tryLogin" />
@@ -701,6 +918,21 @@
     </svg>
 
     <style>
+        line.grid {
+            stroke-width: 0.1;
+            stroke: grey;
+        }
+
+        svg.outer {
+            background-color: navy;
+        }
+
+        svg polyline {
+            stroke-width: 0.1;
+            fill: none;
+            stroke: red;
+        }
+
         svg {
             height: 100vh;
             display: block;
@@ -750,11 +982,13 @@
             fill: aqua;
             cursor: pointer;
         }
+
         rect.selected {
             opacity: 0.2;
             fill: red;
             cursor: pointer;
         }
+
         rect.clickable {
             opacity: 0;
             cursor: pointer;
@@ -763,6 +997,7 @@
         .clickable {
             cursor: pointer;
         }
+
         rect.button {
             fill: lightgray;
             stroke: black;

@@ -165,8 +165,8 @@ INNER JOIN Tables t ON t.Id=a.TableId
 INNER JOIN ValueDates d on d.EntityId=n.EntityId and d.AttributeId=t.DateAttributeId and d.seq=n.seq
 WHERE n.EntityId = @EntityId
 AND n.AttributeId = @AttributeId
-AND d.Value > dateAdd(dd,-@DaysBack,getdate())
-ORDER BY d.Value desc
+AND ((@DaysBack = 0) OR (d.Value > dateAdd(dd,-@DaysBack,getdate())))
+ORDER BY d.Value 
 ", new { EntityId = entityId, AttributeId = attributeId, DaysBack = daysBack });
 
     }
