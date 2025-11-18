@@ -87,10 +87,10 @@ FETCH NEXT @NRows ROWS ONLY
     {
         return GetResult<ViewAttribute>(
             @"
-SELECT AttributeId, a.Name, v.X, v.Y, a.DataTypeId, a.DisplayLength
+SELECT AttributeId, a.Name + CASE WHEN a.Comment IS NULL THEN '' ELSE ' ' + a.Comment END [Name], v.X, v.Y, a.DataTypeId, a.DisplayLength
 FROM ViewAttributes v 
 INNER JOIN Attributes a ON a.Id=v.AttributeId
-WHERE v.ViewId=@ViewId",
+WHERE v.ViewId = @ViewId",
             new { ViewId = viewId }
         );
     }
@@ -155,7 +155,7 @@ FETCH NEXT @Nrows ROWS ONLY",
         );
     }
 
-    public IEnumerable<DatedValue> GetDatedValues(int entityId, short attributeId, int daysBack)
+    public IEnumerable<DatedValue> GetDatedValues(int entityId, short attributeId, long daysBack)
     {
         return GetResult<DatedValue>(@"
 SELECT d.Value [date], n.Value 

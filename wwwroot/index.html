@@ -10,40 +10,55 @@
     <script type="module">
         import { createApp, reactive } from 'https://unpkg.com/petite-vue?module'
 
-        function graph(dateSeries, trueZero, svgHeight, svgWidth) {
+        function GraphData() {
+            this.plotPath = "",
+            this.yCaptions = [],
+            this.xCaptions1 = [],
+            this.xCaptions2 = [],
+            this.dayRange = 0,
+            this.daysBack = 0,
+            this.requestedDaysBack = 0
+        }
+
+        function graph(dateSeries, trueZero) {
+            const result = new GraphData
+            if (dateSeries == null || dateSeries.length < 2) return result
+
             const ms = 24 * 60 * 60 * 1000; //milliseconds in a day
-            const result = {
-                plotPath: "",
-                yCaptions: [],
-                xCaptions1: [],
-                xCaptions2: []
-            }
+            const svgHeight = 30
+            const svgWidth = 70
+
             let daySeries = dateSeries.map((p) => new Date(p.date) / ms);
             let valueSeries = dateSeries.map((p) => p.value);
             let dayMin = Math.min.apply(Math, daySeries);
             let dayMax = Math.max.apply(Math, daySeries);
-
             let avg = mean(valueSeries)
-            let sd = stdDev(valueSeries, avg)
+            let sd = stdDev(valueSeries, avg)  //standard deviation
             let yMax = avg + sd * 3;
             let yMin = avg - sd * 3;
-            if (trueZero || (yMin > sd)) {
-                yMin == 0;
-            }
 
-            let dayRange = dayMax - dayMin;
-
-            let xScale = svgWidth / dayRange;
+            if (trueZero || yMin < sd * 3) yMin = 0
+            result.daysBack = new Date().getTime() / ms - dayMin
+            result.dayRange = dayMax - dayMin;
+            let xScale = svgWidth / result.dayRange;
             let yScale = svgHeight / (yMax - yMin);
 
             for (var i = 0; i < daySeries.length; i++) {
                 result.plotPath += toX(daySeries[i]) + "," + toY(valueSeries[i]) + " "
             }
 
+            //y-axeis captions
             let yInterval = interval(yMax - yMin, 10.0);
+            if (yInterval < 0 && yInterval > 0.01) {
+                // suppress more than 3 decimal places
+                yInterval = Math.round(res * 100) / 100
+            }
 
             for (let y = 0; y <= yMax; y += yInterval) {
-                if (y >= yMin) result.yCaptions.push({ text: Math.round(y * 100) / 100, y: toY(y) });
+                if (y >= yMin) {
+                    let yy = (y > 0.001) ? Math.round(y * 1000) / 1000 : y
+                    result.yCaptions.push({ text: yy, y: toY(yy) });
+                }
             }
 
             // x axis captionns
@@ -55,11 +70,19 @@
             let monthRange = yearMax * 12 + dateMax.getMonth() - (yearMin * 12 + dateMin.getMonth());
 
             if (monthRange < 5) {
-                let incr = Math.floor(interval(dayRange, 10));
+                let incr = Math.floor(interval(result.dayRange, 14, [7, 2, 1]));
                 if (incr < 1) incr = 1;
-                let d = dateMin
+                let d = new Date(dateMin.getFullYear(), dateMin.getMonth())
+                let om = d.getMonth()
                 while (d < dateMax) {
-                    result.xCaptions1.push({ text: d.getDate(), x: toX(d.getTime() / ms) });
+                    let m = d.getMonth()
+                    if (m != om) {
+                        om = m
+                        d = new Date(d.getFullYear(), m)
+                        //result.xCaptions1.push({ text: "1", x: toX(d.getTime() / ms) });
+                    } else {
+                        result.xCaptions1.push({ text: d.getDate(), x: toX(d.getTime() / ms) });
+                    }
                     d = new Date(d.getTime() + incr * ms);
                 }
                 result.xCaptions2 = monthCaptions({ month: "short", year: "numeric" });
@@ -138,6 +161,7 @@
                     }
                 }
                 return magMsd * magPow;
+
             }
 
             function toX(day) {
@@ -157,6 +181,7 @@
             };
 
         }
+
 
         const app = reactive({
 
@@ -188,15 +213,9 @@
             isConfig: false,
             attributeConfig: { id: 0 },
             attributeUse: new attributeUse(),
-            datedValues: [],
             lookupsPage: 0,
             graphAttribute: null,
-            plotPath: "",
-            yCaptions: [],
-            xCaptions1: [],
-            xCaptions2: [],
-            svgHeight: 34,
-            svgWidth: 70,
+            graphData: new GraphData(),
             trueZero: false,
             nextLookups() {
                 this.lookupsPage++
@@ -352,27 +371,30 @@
                     this.mode = 5
                     this.getAttributeConfig(a.attributeId)
                     this.getAttributeUse(a.attributeId)
-
-                    return;
                 } else {
-                    this.getDatedValues(a)
+                    if (this.entityId > 0 && (a.dataTypeId == 2 || a.dataTypeId == 7)) {
+                        this.getDatedValues(a)
+                    }
+                }
+            },
+            graphZoom(dir) {
+                if (this.graphData && this.graphAttribute) {
+                    let dayRange = this.graphData.dayRange
+                    let daysBack = this.graphData.daysBack
                     
+                    if (dir < 0) dayRange /= 2
+                    if (dir > 0) dayRange *= 2
+                    daysBack = Math.ceil(daysBack + dayRange * dir)
+                    this.getDatedValues(this.graphAttribute, daysBack)
                 }
             },
             async getDatedValues(a, daysBack = 0) {
                 fetchWrapper
                     .get('DatedValues/' + this.entityId + ',' + a.attributeId + ',' + daysBack)
                     .then((values) => {
-                        if (values.length > 1) {
-
-                            let res = graph(values, this.trueZero, this.svgHeight, this.svgWidth)      
-                        
-                            this.plotPath = res.plotPath
-                            this.yCaptions = res.yCaptions
-                            this.xCaptions1 = res.xCaptions1
-                            this.xCaptions2 = res.xCaptions2
-                            this.graphAttribute = a
-                        }
+                        this.graphData = graph(values, this.trueZero)
+                        this.graphAttribute = a
+                        this.graphData.requestedDaysBack = daysBack
                     })
                     .catch((error) => console.error(error));
             },
@@ -404,7 +426,22 @@
                     .then((values) => this.values = values)
                     .catch((error) => console.error(error));
             },
-
+            selectTargetClass(a) {
+                if (this.isConfig) {
+                    return a.attributeId == this.attributeConfig.id ? 'selected' : 'config'
+                } else if (this.entityId > 0) {
+                    return (a.dataTypeId == 2 || a.dataTypeId == 7) ? 'clickable' : 'hidden'
+                }
+                else return 'hidden'
+            },
+            selectTooltip(a) {
+                if (this.isConfig) {
+                    return 'click here to display config data for ' + a.name
+                } else if (this.entityId > 0) {
+                    return a.dataTypeId == 2 || a.dataTypeId == 7 ? 'click here to graph ' + a.name : null
+                }
+                return null
+            },
             async getIdValues() {
                 fetchWrapper
                     .get('ViewValues/' + this.entityType.idlineViewId + ',' + this.entityId + ',0')
@@ -417,7 +454,6 @@
                 this.menuHistory = []
 
                 if (typeof search === "string" && search.length > 0) {
-                    console.log(this.entityType.name)
                     this.views = this.entityType.views.filter(v => v.captions.some(c => c.text.toLowerCase().includes(search.toLowerCase())));
 
                     return;
@@ -462,10 +498,11 @@
                 if (this.entityId > 0) {
                     this.getIdValues()
                     if (this.view.id > 0) {
-                        this.getMainValues()
-                        this.getNPages()
-                        if (graphAttribute) {
-                            getDatedValues(graphAttribute)
+                        if (this.graphAttribute) {
+                            this.getDatedValues(this.graphAttribute)
+                        } else {
+                            this.getMainValues()
+                            this.getNPages()
                         }
                         return
                     }
@@ -840,8 +877,10 @@
             <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2" v-html="viewCaption(c.text)"></text>
             <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
             <rect v-for="a in view.viewAttributes" :height="(view.nRows) * 2 - 0.33333" :width="a.displayLength"
-                  :class="[isConfig? a.attributeId==attributeConfig.id? 'selected':'config':  'clickable']"
-                  :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a)" />
+                  :class="selectTargetClass(a)"
+                  :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a)">
+               <title>{{selectTooltip(a)}}</title>
+            </rect> />
             <text v-show="nPages>1" class="value" x="26" y="43">{{page + 1}}/{{nPages}}</text>
             <text class="caption" x="1" y="43">{{menu.name}}</text>
             <text :class="[i.isSelected? 'selected': 'input']" v-for="i in menu.menuItems"
@@ -849,35 +888,46 @@
                   :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
         </g>
         <g v-show="graphAttribute">
-            <!-- plot area -->
-            <svg :view-box.camel="'0 0 ' + svgWidth + ' ' + svgHeight" x="10" y="3" height="34" width="70" class="plotArea" preserveAspectRatio="none">
-                <polyline :points="plotPath" />
-                <!-- gridlines -->
-                <line v-for="c in yCaptions" :y1="c.y" :y2="c.y" x1="0" x2="70"></line>
-                <line v-for="c in xCaptions1" y1="0" y2="34" :x1="c.x" :x2="c.x"></line>
-                <text class="caption" x="10" y="3">{{graphAttribute.name}}</text>
+            <!-- graph area -->
+            <svg x="0" y="3" width="80" height="38"
+                 viewBox="0 0 80 34" preserveAspectRatio="none" class="outer" @click="setPoints">
+                <g v-show="graphData.plotPath.trim() != ''">
+                    <rect width="100%" height="100%" class="outer" />
+                    <!-- plot area -->
+                    <svg viewBox="0 0 70 30" x="10" y="0" height="30" width="80"
+                         class="plotArea" preserveAspectRatio="none">
+                        <rect width="100%" height="100%" class="plotArea" />
+                        <polyLine :points="graphData.plotPath" />
+                        <!-- gridlines -->
+                        <line v-for="c in graphData.xCaptions1" y1="0" y2="34" :x1="c.x" :x2="c.x" class="grid"></line>
+                        <line v-for="c in graphData.yCaptions" :y1="c.y" :y2="c.y" x1="0" x2="70" class="grid"></line>
+                    </svg>
+                    <!-- Y scale -->
+                    <svg x="0" y="0" height="30" width="10" viewBox="0 0 10 30" class="axis" preserveAspectRatio="none">
+                        <text text-anchor="end" v-for="c in graphData.yCaptions" :y="c.y" x="9.8" class="axis">
+                            {{c.text}}
+                        </text>
+                    </svg>
+                    <!-- X scale -->
+                    <svg x="10" y="30" width="70" height="4" viewBox="0 0 70 4" class="axis" preserveAspectRatio="none">
+                        <line v-for="c in graphData.xCaptions2" y1="0" y2="4" :x1="c.x" :x2="c.x" class="grid"></line>
+                        <text v-for="c2 in graphData.xCaptions2" y="3.6" :x="c2.x" class="axis">
+                            {{c2.text}}
+                        </text>
+                        <text v-for="c1 in graphData.xCaptions1" y="1.6" :x="c1.x" class="axis">
+                            {{c1.text}}
+                        </text>
+                    </svg>
+                </g>
+                <g v-show="graphData.plotPath.trim() == ''">
+                    <text class="axis" x="37" y="20"> No data</text>
+                </g>
             </svg>
-            <!-- Y scale -->
-            <svg x="0" y="3" height="34" width="10" viewBox="0 0 10 34" class="axis" preserveAspectRatio="none">
-                <text class="value" text-anchor="end" v-for="c in yCaptions" :y="c.y" x="9.8">
-                    {{c.text}}
-                </text>
-            </svg>
-            <!-- X scale -->
-            <svg x="10" y="37" width="70" height="4" viewBox="0 0 70 4" class="axis" preserveAspectRatio="none">
-                <text class="value" v-for="c1 in xCaptions1" y="1.6" :x="c1.x">
-                    {{c1.text}}
-                </text>
-                <text class="value" v-for="c2 in xCaptions2" y="3.6" :x="c2.x">
-                    {{c2.text}}
-                </text>
-                <line v-for="c in xCaptions2" y1="0" y2="4" :x1="c.x" :x2="c.x"></line>
-            </svg>
-
             <text class="caption" x="41" y="43">Graphing {{graphAttribute.name}}</text>
-            <text class="input" x="41" y="45" @click="graphAttribute=null">Finished</text>
+            <text v-show="graphData.requestedDaysBack > 0" class="input" x="41" y="45" @click="graphZoom(1)">Zoom out</text>
+            <text v-show="graphData.dayRange > 2" class="input" x="54" y="45" @click="graphZoom(-1)">Zoom in</text>
+            <text class="input" x="67" y="47" @click="graphAttribute=null">Finished</text>
         </g>
-        
         <g v-show="isAdvanced">
             <text :class="[(mode==1)? 'selected': 'input']" x="1" y="45" @click="mode=1">Select by {{indexType.name}}</text>
             <text :class="[(mode==2)? 'selected': 'input']" x="1" y="47" @click="mode=2">View</text>
@@ -888,7 +938,7 @@
 
                     <rect x="0" y="0" height="100" width="100" fill="white" stroke="black" stroke-width="5" />
                     <polyline v-show="isConfig" points="0,50 40,100 100,0"
-                              style="fill:none;stroke:red;stroke-width:20" />
+                                style="fill:none;stroke:red;stroke-width:20" />
                 </svg>
                 <text x="19" y="43" :class="[(isConfig)? 'selected': 'input']">config</text>
             </g>
@@ -927,12 +977,26 @@
             background-color: navy;
         }
 
+        text.axis {
+            fill: white;
+            font-size: 1.6666;
+        }
+
         svg polyline {
-            stroke-width: 0.1;
+            stroke-width: 0.2;
             fill: none;
             stroke: red;
         }
 
+        rect.outer {
+            fill: navy;
+        }
+
+        rect.plotArea {
+            fill: hsl(from navy h s calc(l + 10));
+            stroke: white;
+            stroke-width: 0.2;
+        }
         svg {
             height: 100vh;
             display: block;
@@ -989,6 +1053,10 @@
             cursor: pointer;
         }
 
+        rect.hidden {
+            opacity: 0;
+        }
+
         rect.clickable {
             opacity: 0;
             cursor: pointer;
@@ -1033,6 +1101,7 @@
         p.input {
             background-color: white;
         }
+
     </style>
 </body>
 </html>
