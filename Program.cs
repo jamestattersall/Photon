@@ -61,8 +61,8 @@ app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", ( int indexType
 app.MapGet("/lookups/{attributeId},{page},{nRows}", (int attributeId, int page, int nRows) =>
     repository.GetLookups(attributeId, page, nRows)).RequireAuthorization();
 
-app.MapGet("/DatedValues/{entityId},{attributeId},{daysBack}",( int entityId, short attributeId, int daysBack = int.MaxValue) =>
-    repository.GetDatedValues( entityId, attributeId, daysBack)).RequireAuthorization();
+app.MapGet("/DatedValues/{entityId},{attributeId}",( int entityId, short attributeId) =>
+    repository.GetDatedValues( entityId, attributeId)).RequireAuthorization();
 
 app.MapGet("/NPages/{viewId},{entityId}", (short viewId, int entityId) =>
     repository.NPages( viewId, entityId)).RequireAuthorization();

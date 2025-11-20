@@ -155,7 +155,7 @@ FETCH NEXT @Nrows ROWS ONLY",
         );
     }
 
-    public IEnumerable<DatedValue> GetDatedValues(int entityId, short attributeId, long daysBack)
+    public IEnumerable<DatedValue> GetDatedValues(int entityId, short attributeId)
     {
         return GetResult<DatedValue>(@"
 SELECT d.Value [date], n.Value 
@@ -165,9 +165,8 @@ INNER JOIN Tables t ON t.Id=a.TableId
 INNER JOIN ValueDates d on d.EntityId=n.EntityId and d.AttributeId=t.DateAttributeId and d.seq=n.seq
 WHERE n.EntityId = @EntityId
 AND n.AttributeId = @AttributeId
-AND ((@DaysBack = 0) OR (d.Value > dateAdd(dd,-@DaysBack,getdate())))
 ORDER BY d.Value 
-", new { EntityId = entityId, AttributeId = attributeId, DaysBack = daysBack });
+", new { EntityId = entityId, AttributeId = attributeId });
 
     }
 

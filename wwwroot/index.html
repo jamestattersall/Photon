@@ -10,176 +10,191 @@
     <script type="module">
         import { createApp, reactive } from 'https://unpkg.com/petite-vue?module'
 
-        function GraphData() {
-            this.plotPath = "",
-            this.yCaptions = [],
-            this.xCaptions1 = [],
-            this.xCaptions2 = [],
-            this.dayRange = 0,
-            this.daysBack = 0,
-            this.requestedDaysBack = 0
-        }
-
-        function graph(dateSeries, trueZero) {
-            const result = new GraphData
-            if (dateSeries == null || dateSeries.length < 2) return result
-
-            const ms = 24 * 60 * 60 * 1000; //milliseconds in a day
-            const svgHeight = 30
-            const svgWidth = 70
-
-            let daySeries = dateSeries.map((p) => new Date(p.date) / ms);
-            let valueSeries = dateSeries.map((p) => p.value);
-            let dayMin = Math.min.apply(Math, daySeries);
-            let dayMax = Math.max.apply(Math, daySeries);
-            let avg = mean(valueSeries)
-            let sd = stdDev(valueSeries, avg)  //standard deviation
-            let yMax = avg + sd * 3;
-            let yMin = avg - sd * 3;
-
-            if (trueZero || yMin < sd * 3) yMin = 0
-            result.daysBack = new Date().getTime() / ms - dayMin
-            result.dayRange = dayMax - dayMin;
-            let xScale = svgWidth / result.dayRange;
-            let yScale = svgHeight / (yMax - yMin);
-
-            for (var i = 0; i < daySeries.length; i++) {
-                result.plotPath += toX(daySeries[i]) + "," + toY(valueSeries[i]) + " "
+        const ms = 24 * 60 * 60 * 1000; //milliseconds in a day
+        class Graphics {
+            constructor(dateSeries = []) {
+                this.dateSeries = dateSeries
+                this.zoomFraction = 1.0
+                this.plotPoints = dateSeries.length
+                this.trueZero = false
+                this.plot()
             }
 
-            //y-axeis captions
-            let yInterval = interval(yMax - yMin, 10.0);
-            if (yInterval < 0 && yInterval > 0.01) {
-                // suppress more than 3 decimal places
-                yInterval = Math.round(res * 100) / 100
+            reset() {
+                this.plotPath = "",
+                    this.yCaptions = [],
+                    this.xCaptions1 = [],
+                    this.xCaptions2 = []
             }
 
-            for (let y = 0; y <= yMax; y += yInterval) {
-                if (y >= yMin) {
-                    let yy = (y > 0.001) ? Math.round(y * 1000) / 1000 : y
-                    result.yCaptions.push({ text: yy, y: toY(yy) });
+
+            plot() {
+                this.reset()
+                if (this.dateSeries == null || this.dateSeries.length < 2) return
+
+                const svgHeight = 30
+                const svgWidth = 65
+
+                let ds
+                if (this.zoomFraction >= 1) {
+                   ds = this.dateSeries
+                } else {
+                   ds = this.dateSeries.slice(Math.floor(this.dateSeries.length * (1 - this.zoomFraction)))
+                  
                 }
-            }
+                this.plotPoints = ds.length;
 
-            // x axis captionns
-            let dateMin = new Date(dateSeries[0].date);
-            let dateMax = new Date(dateSeries[dateSeries.length - 1].date);
-            let yearMin = dateMin.getFullYear();
-            let yearMax = dateMax.getFullYear();
-            let yearRange = yearMax - yearMin;
-            let monthRange = yearMax * 12 + dateMax.getMonth() - (yearMin * 12 + dateMin.getMonth());
+                let daySeries = ds.map((p) => new Date(p.date) / ms);
+                let valueSeries = ds.map((p) => p.value);
+                let dayMin = Math.min.apply(Math, daySeries);
+                let dayMax = Math.max.apply(Math, daySeries);
+                let avg = mean(valueSeries)
+                let sd = stdDev(valueSeries, avg)  //standard deviation
+                let yMax = avg + sd * 4;
+                let yMin = avg - sd * 3;
 
-            if (monthRange < 5) {
-                let incr = Math.floor(interval(result.dayRange, 14, [7, 2, 1]));
-                if (incr < 1) incr = 1;
-                let d = new Date(dateMin.getFullYear(), dateMin.getMonth())
-                let om = d.getMonth()
-                while (d < dateMax) {
-                    let m = d.getMonth()
-                    if (m != om) {
-                        om = m
-                        d = new Date(d.getFullYear(), m)
-                        //result.xCaptions1.push({ text: "1", x: toX(d.getTime() / ms) });
-                    } else {
-                        result.xCaptions1.push({ text: d.getDate(), x: toX(d.getTime() / ms) });
+                if (this.trueZero || yMin < sd * 3) yMin = 0
+                let dayRange = dayMax - dayMin;
+                let xScale = svgWidth / dayRange;
+                let yScale = svgHeight / (yMax - yMin);
+
+                for (var i = 0; i < daySeries.length; i++) {
+                    this.plotPath += toX(daySeries[i]) + "," + toY(valueSeries[i]) + " "
+                }
+
+                //y-axeis captions
+                let yInterval = interval(yMax - yMin, 10.0);
+                if (yInterval < 0 && yInterval > 0.01) {
+                    // suppress more than 3 decimal places
+                    yInterval = Math.round(yInterval * 100) / 100
+                }
+
+                for (let y = 0; y <= yMax; y += yInterval) {
+                    if (y >= yMin) {
+                        let yy = (y > 0.001) ? Math.round(y * 1000) / 1000 : y
+                        this.yCaptions.push({ text: yy, y: toY(yy) });
                     }
-                    d = new Date(d.getTime() + incr * ms);
                 }
-                result.xCaptions2 = monthCaptions({ month: "short", year: "numeric" });
-                if (
-                    result.xCaptions2.length == 0 ||
-                    result.xCaptions2[0].x > svgWidth / 5
-                ) {
-                    result.xCaptions2.push({
-                        text: dateMin.toLocaleDateString("default", { month: "short", year: "numeric" }), x: 0
-                    });
-                }
-            } else if (yearRange < 5) {
-                result.xCaptions1 = monthCaptions({ month: "short" });
-                result.xCaptions2 = yearCaptions();
-                if (
-                    result.xCaptions2.length == 0 ||
-                    result.xCaptions2[0].x > svgWidth / 5
-                ) {
-                    result.xCaptions2.push({ text: yearMin, x: 0 });
-                }
-            } else {
-                result.xCaptions1 = yearCaptions();
-            }
 
-            return result
+                // x axis captionns
+                let dateMin = new Date(ds[0].date);
+                let dateMax = new Date(ds[ds.length - 1].date);
+                let yearMin = dateMin.getFullYear();
+                let yearMax = dateMax.getFullYear();
+                let yearRange = yearMax - yearMin;
+                let monthRange = yearMax * 12 + dateMax.getMonth() - (yearMin * 12 + dateMin.getMonth());
 
-            function monthCaptions(format) {
-                let capts = [];
-                if (monthRange > 0) {
-                    let d = new Date(yearMin, 0);
-                    let incr = Math.floor(interval(monthRange, 10, [12, 6, 3, 2, 1]));
+                if (monthRange < 5) {
+                    let incr = Math.floor(interval(dayRange, 14, [7, 2, 1]));
                     if (incr < 1) incr = 1;
+                    let d = new Date(dateMin.getFullYear(), dateMin.getMonth())
+                    let om = d.getMonth()
                     while (d < dateMax) {
-                        if (d >= dateMin) {
-                            capts.push({
-                                text: d.toLocaleDateString("default", format),
-                                x: toX(d.getTime() / ms),
-                            });
+                        let m = d.getMonth()
+                        if (m != om) {
+                            om = m
+                            d = new Date(d.getFullYear(), m)
+                            //this.xCaptions1.push({ text: "1", x: toX(d.getTime() / this.ms) });
+                        } else {
+                            this.xCaptions1.push({ text: d.getDate(), x: toX(d.getTime() / ms) });
                         }
-                        let m = d.getMonth() + incr;
-                        let y = d.getFullYear();
-                        if (m > 12) {
-                            y += Math.floor(m / 12);
-                            m = m % 12;
+                        d = new Date(d.getTime() + incr * ms);
+                    }
+                    this.xCaptions2 = monthCaptions({ month: "short", year: "numeric" });
+                    if (
+                        this.xCaptions2.length == 0 ||
+                        this.xCaptions2[0].x > svgWidth / 5
+                    ) {
+                        this.xCaptions2.push({
+                            text: dateMin.toLocaleDateString("default", { month: "short", year: "numeric" }), x: 0
+                        });
+                    }
+                } else if (yearRange < 5) {
+                    this.xCaptions1 = monthCaptions({ month: "short" });
+                    this.xCaptions2 = yearCaptions();
+                    if (
+                        this.xCaptions2.length == 0 ||
+                        this.xCaptions2[0].x > svgWidth / 5
+                    ) {
+                        this.xCaptions2.push({ text: yearMin, x: 0 });
+                    }
+                } else {
+                    this.xCaptions1 = yearCaptions();
+                }
+
+                return this
+
+                function monthCaptions(format) {
+                    let capts = [];
+                    if (monthRange > 0) {
+                        let d = new Date(yearMin, 0);
+                        let incr = Math.floor(interval(monthRange, 10, [12, 6, 3, 2, 1]));
+                        if (incr < 1) incr = 1;
+                        while (d < dateMax) {
+                            if (d >= dateMin) {
+                                capts.push({
+                                    text: d.toLocaleDateString("default", format),
+                                    x: toX(d.getTime() / ms),
+                                });
+                            }
+                            let m = d.getMonth() + incr;
+                            let y = d.getFullYear();
+                            if (m > 12) {
+                                y += Math.floor(m / 12);
+                                m = m % 12;
+                            }
+                            d = new Date(y, m);
                         }
-                        d = new Date(y, m);
                     }
+                    return capts;
                 }
-                return capts;
-            }
 
-            function yearCaptions() {
-                let capts = [];
-                if (yearRange > 0) {
-                    let incr = Math.floor(interval(yearRange, 10));
-                    if (incr < 1) incr = 1;
-                    let d = new Date(yearMin, 0);
-                    while (d < dateMax) {
-                        if (d >= dateMin) {
-                            capts.push({ text: d.getFullYear(), x: toX(d.getTime() / ms) });
+                function yearCaptions() {
+                    let capts = [];
+                    if (yearRange > 0) {
+                        let incr = Math.floor(interval(yearRange, 10));
+                        if (incr < 1) incr = 1;
+                        let d = new Date(yearMin, 0);
+                        while (d < dateMax) {
+                            if (d >= dateMin) {
+                                capts.push({ text: d.getFullYear(), x: toX(d.getTime() / ms) });
+                            }
+                            d = new Date(d.getFullYear() + incr, 0);
                         }
-                        d = new Date(d.getFullYear() + incr, 0);
                     }
+                    return capts;
                 }
-                return capts;
-            }
 
-            function interval(range, steps, defaults = [10, 5, 2, 1]) {
-                var tempStep = range / steps;
-                var magPow = Math.pow(10.0, Math.floor(Math.log10(tempStep)));
-                var magMsd = Math.round(tempStep / magPow + 0.5);
-                for (var i = 0; i < defaults.length - 1; i++) {
-                    if (magMsd > defaults[i + 1]) {
-                        magMsd = defaults[i];
-                        break;
+                function interval(range, steps, defaults = [10, 5, 2, 1]) {
+                    var tempStep = range / steps;
+                    var magPow = Math.pow(10.0, Math.floor(Math.log10(tempStep)));
+                    var magMsd = Math.round(tempStep / magPow + 0.5);
+                    for (var i = 0; i < defaults.length - 1; i++) {
+                        if (magMsd > defaults[i + 1]) {
+                            magMsd = defaults[i];
+                            break;
+                        }
                     }
+                    return magMsd * magPow;
+
                 }
-                return magMsd * magPow;
 
+                function toX(day) {
+                    return (day - dayMin) * xScale;
+                }
+
+                function toY(val) {
+                    return svgHeight - (val - yMin) * yScale;
+                }
+
+                function mean(arr) {
+                    return arr.reduce((acc, val) => acc + val, 0) / arr.length;
+                }
+
+                function stdDev(arr, mean) {
+                    return arr.reduce((acc, val) => acc + Math.abs(val - mean), 0) / arr.length;
+                };
             }
-
-            function toX(day) {
-                return (day - dayMin) * xScale;
-            }
-
-            function toY(val) {
-                return svgHeight - (val - yMin) * yScale;
-            }
-
-            function mean(arr) {
-                return arr.reduce((acc, val) => acc + val, 0) / arr.length;
-            }
-
-            function stdDev(arr, mean) {
-                return arr.reduce((acc, val) => acc + Math.abs(val - mean), 0) / arr.length;
-            };
-
         }
 
 
@@ -215,8 +230,7 @@
             attributeUse: new attributeUse(),
             lookupsPage: 0,
             graphAttribute: null,
-            graphData: new GraphData(),
-            trueZero: false,
+            graphData: new Graphics(),
             nextLookups() {
                 this.lookupsPage++
                 this.getLookups()
@@ -379,22 +393,24 @@
             },
             graphZoom(dir) {
                 if (this.graphData && this.graphAttribute) {
-                    let dayRange = this.graphData.dayRange
-                    let daysBack = this.graphData.daysBack
-                    
-                    if (dir < 0) dayRange /= 2
-                    if (dir > 0) dayRange *= 2
-                    daysBack = Math.ceil(daysBack + dayRange * dir)
-                    this.getDatedValues(this.graphAttribute, daysBack)
+                    let zf = this.graphData.zoomFraction
+                    if (dir > 0 && zf <= 0.5) {
+                        zf = zf * 2
+                    }
+                    else if (dir < 0 && this.graphData.plotPoints >= 4) {
+                        zf = zf / 2
+                    }
+                    this.graphData.zoomFraction = zf
+                    this.graphData.plot()
                 }
             },
-            async getDatedValues(a, daysBack = 0) {
+            async getDatedValues(a) {
                 fetchWrapper
-                    .get('DatedValues/' + this.entityId + ',' + a.attributeId + ',' + daysBack)
+                    .get('DatedValues/' + this.entityId + ',' + a.attributeId)
                     .then((values) => {
-                        this.graphData = graph(values, this.trueZero)
+                        this.dateValueSeries = values;
+                        this.graphData = new Graphics(values)
                         this.graphAttribute = a
-                        this.graphData.requestedDaysBack = daysBack
                     })
                     .catch((error) => console.error(error));
             },
@@ -890,14 +906,14 @@
         <g v-show="graphAttribute">
             <!-- graph area -->
             <svg x="0" y="3" width="80" height="38"
-                 viewBox="0 0 80 34" preserveAspectRatio="none" class="outer" @click="setPoints">
+                 viewBox="0 0 80 34" preserveAspectRatio="none" class="outer" >
                 <g v-show="graphData.plotPath.trim() != ''">
                     <rect width="100%" height="100%" class="outer" />
                     <!-- plot area -->
-                    <svg viewBox="0 0 70 30" x="10" y="0" height="30" width="80"
+                    <svg viewBox="0 0 65 30" x="10" y="0" height="30" width="65"
                          class="plotArea" preserveAspectRatio="none">
                         <rect width="100%" height="100%" class="plotArea" />
-                        <polyLine :points="graphData.plotPath" />
+                        <polyline :points="graphData.plotPath" />
                         <!-- gridlines -->
                         <line v-for="c in graphData.xCaptions1" y1="0" y2="34" :x1="c.x" :x2="c.x" class="grid"></line>
                         <line v-for="c in graphData.yCaptions" :y1="c.y" :y2="c.y" x1="0" x2="70" class="grid"></line>
@@ -909,7 +925,7 @@
                         </text>
                     </svg>
                     <!-- X scale -->
-                    <svg x="10" y="30" width="70" height="4" viewBox="0 0 70 4" class="axis" preserveAspectRatio="none">
+                    <svg x="10" y="30" width="75" height="4" viewBox="0 0 75 4" class="axis" preserveAspectRatio="none">
                         <line v-for="c in graphData.xCaptions2" y1="0" y2="4" :x1="c.x" :x2="c.x" class="grid"></line>
                         <text v-for="c2 in graphData.xCaptions2" y="3.6" :x="c2.x" class="axis">
                             {{c2.text}}
@@ -924,8 +940,8 @@
                 </g>
             </svg>
             <text class="caption" x="41" y="43">Graphing {{graphAttribute.name}}</text>
-            <text v-show="graphData.requestedDaysBack > 0" class="input" x="41" y="45" @click="graphZoom(1)">Zoom out</text>
-            <text v-show="graphData.dayRange > 2" class="input" x="54" y="45" @click="graphZoom(-1)">Zoom in</text>
+            <text v-show="graphData.zoomFraction < 1" class="input" x="41" y="45" @click="graphZoom(1)">Zoom out</text>
+            <text v-show="graphData.zoomFraction > 0" class="input" x="54" y="45" @click="graphZoom(-1)">Zoom in</text>
             <text class="input" x="67" y="47" @click="graphAttribute=null">Finished</text>
         </g>
         <g v-show="isAdvanced">
