@@ -1,0 +1,20 @@
+﻿##Photon - A minimal web application to access data copied from a Proton database.##
+
+Requires an MSSQL databse in EAV format, copied from a Proton system.
+See https://github.com/jamestattersall/Proton2Mssql
+
+Photon consists of an html/javascript user interface to be viwed in a web browser and a .net core 10.0 web API.
+The UI 
+
+###Installation###
+requires .net core 10+
+provide connection string to the mssql database in appsettings.json
+
+The backend server includes its own web server (Kestrel) so can be run directly from the command line or indirectly through IIS.
+
+The app layout (screen layout, captions, tables, fields, menus etc.) is informed by the metadata copied from Proton. 
+Authentication is via windows authentication and user permissions taken from the Proton database on submission of an existing proton password.
+After login, the user can view and all data held in Proton, mostly with the same appearance and layout as in Proton itself. Fields and reports which depend on Quark (The reporting laguage built-in to Proton) are not accessible in Photon.
+
+
+```
