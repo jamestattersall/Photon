@@ -1,8 +1,8 @@
 using JwtAuthApp.JWT;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
+using Photon.Models;
 using TestJwt.Identity;
-using TestJwt.Model;
 using TestJwt.Swagger;
 
 
@@ -12,7 +12,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 
-var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfiguration>();
+var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfiguration>() ?? throw new InvalidOperationException("Jwt configuration is missing or invalid.");
+
 builder.Services.AddSingleton(jwtConfig);
 
 builder.Services.AddScoped<IdentityService>();
@@ -39,9 +40,14 @@ app.UseDefaultFiles("/index.html");
 
 app.UseDeveloperExceptionPage();
 
+// Fix for CS8604: Ensure connectionString is not null before using it
 var connectionString = builder.Configuration.GetConnectionString("default");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException("Database connection string 'default' is missing or invalid.");
+}
 
-ProtonRepository repository = new(connectionString);
+Photon.ProtonRepository repository = new(connectionString);
 
 app.MapGet("/EntityTypes",() =>  
     repository.GetEntityTypes()).RequireAuthorization();
