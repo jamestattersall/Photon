@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 
-namespace JwtAuthApp.JWT;
+
+namespace Photon.Jwt;
 
 public record JwtConfiguration
 {

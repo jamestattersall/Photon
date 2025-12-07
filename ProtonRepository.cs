@@ -26,7 +26,7 @@ namespace Photon;
             var encrypted = Decrypt(pwd);
             var userStarter = GetResult<UserStarter>("SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
                 new { userCode = encrypted }).FirstOrDefault();
-            if(userStarter != null) userStarter.Menu = GetMenu(userStarter.MenuId);
+            userStarter?.Menu = GetMenu(userStarter.MenuId);
 
             return userStarter;
         }

@@ -1,11 +1,10 @@
-﻿using JwtAuthApp.JWT;
-
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
 using System.Text;
 
+namespace Photon.Jwt;
 public static class JwtAuthBuilderExtensions
 {
     public static AuthenticationBuilder AddJwtAuthentication(this IServiceCollection services, JwtConfiguration jwtConfiguration)

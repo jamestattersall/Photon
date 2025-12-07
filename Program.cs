@@ -1,9 +1,8 @@
-using JwtAuthApp.JWT;
+using Photon.Jwt;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.OpenApi;
 using Photon.Models;
-using TestJwt.Identity;
-using TestJwt.Swagger;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,7 +17,25 @@ builder.Services.AddSingleton(jwtConfig);
 
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddJwtAuthentication(jwtConfig);
-builder.Services.AddSwaggerGen(SwaggerConfiguration.Configure);
+
+builder.Services.AddSwaggerGen(options =>
+{
+    // ...
+
+    options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "JWT Authorization header using the Bearer scheme."
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("bearer", document)] = []
+    });
+});
+
 
 var app = builder.Build();
 
@@ -91,15 +108,12 @@ app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authe
 
         if (userStarter == null)
         {
-            logger.LogWarning("Login failed for user: {Username}", userName);
             return Results.BadRequest(new { message = "Password does not match any in Proton." });
         }
         userStarter.Menu = repository.GetMenu(userStarter.MenuId);
 
         // Generate JWT token
         var token = identityService.GenerateToken(userName!);
-
-        logger.LogInformation("User {Username} authenticated successfully.", userName);
 
         return Results.Ok(new LoginResponse
         {

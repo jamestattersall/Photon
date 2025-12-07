@@ -1,10 +1,9 @@
-﻿using JwtAuthApp.JWT;
-using Microsoft.IdentityModel.Tokens;
+﻿using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 
-namespace TestJwt.Identity;
+namespace Photon.Jwt;
 
 public class IdentityService(JwtConfiguration config)
 {
