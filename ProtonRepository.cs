@@ -47,7 +47,16 @@ namespace Photon;
                 new { ViewId = viewId, EntityId = entityId, Page = page }
             );
         }
-        public AttributeConfig GetAttributeConfig(int attributeId)
+
+    public IEnumerable<ViewValue> GetViewValues2(int viewId, int entityId, int page = 0)
+    {
+        return GetResult<ViewValue>(
+            "SELECT attributeId, Value Text, Seq  FROM GetViewValues2(@viewId, @entityId, @page) order by attributeId",
+            new { ViewId = viewId, EntityId = entityId, Page = page }
+        );
+    }
+
+    public AttributeConfig GetAttributeConfig(int attributeId)
         {
             using var cn = new SqlConnection(_connectionString);
 
@@ -290,7 +299,14 @@ namespace Photon;
         public short AttributeId { get; set; }
     }
 
-    public class AttributeConfig
+public class ViewValue2
+{
+    public required string Text { get; set; }
+    public short AttributeId { get; set; }
+    public int Seq { get; set; }
+}
+
+public class AttributeConfig
     {
         public int Id { get; set; }
         public required string Name { get; set; }
@@ -336,7 +352,7 @@ namespace Photon;
     {
         public int AttributeId { get; set; }
         public byte DataTypeId { get; set; }
-        public string Name { get; set; }
+        public string? Name { get; set; }
         public byte DisplayLength { get; set; }
         public byte X { get; set; }
         public byte Y { get; set; }
