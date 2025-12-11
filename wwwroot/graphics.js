@@ -1,39 +1,33 @@
-﻿
+﻿const ms = 24 * 60 * 60 * 1000; //milliseconds in a day
 
-const ms = 24 * 60 * 60 * 1000; //milliseconds in a day
-
-class Graphics {
-    constructor(dateSeries = []) {
-        this.dateSeries = dateSeries
-        this.zoomFraction = 1.0
-        this.plotPoints = dateSeries.length
-        this.trueZero = false
-        this.plot()
-    }
-
-    reset() {
+export const graphics = {
+    zoomFraction: 1.0,
+    trueZero: false,
+    plotPath: "",
+    yCaptions: [],
+    xCaptions1: [],
+    xCaptions2: [],
+    datedValues: [],
+    reset: function() {
         this.plotPath = "",
-            this.yCaptions = [],
-            this.xCaptions1 = [],
-            this.xCaptions2 = []
-    }
-
-
-    plot() {
+        this.yCaptions = [],
+        this.xCaptions1 = [],
+        this.xCaptions2 = []
+    },
+    plot: function() {
         this.reset()
-        if (this.dateSeries == null || this.dateSeries.length < 2) return
+        if (this.datedValues?.length < 2) return
 
+  
         const svgHeight = 30
         const svgWidth = 65
 
         let ds
         if (this.zoomFraction >= 1) {
-            ds = this.dateSeries
+            ds = this.datedValues
         } else {
-            ds = this.dateSeries.slice(Math.floor(this.dateSeries.length * (1 - this.zoomFraction)))
-                  
+            ds = this.datedValues.slice(Math.floor(this.datedValues.length * (1 - this.zoomFraction)))
         }
-        this.plotPoints = ds.length;
 
         let daySeries = ds.map((p) => new Date(p.date).getTime() / ms);
         let valueSeries = ds.map((p) => p.value);
@@ -113,7 +107,7 @@ class Graphics {
             this.xCaptions1 = yearCaptions();
         }
 
-        return this
+        return
 
         function monthCaptions(format) {
             let capts = [];
@@ -123,10 +117,7 @@ class Graphics {
                 if (incr < 1) incr = 1;
                 while (d < dateMax) {
                     if (d >= dateMin) {
-                        capts.push({
-                            text: d.toLocaleDateString("default", format),
-                            x: toX(d.getTime() / ms),
-                        });
+                        capts.push({text: d.toLocaleDateString("default", format), x: toX(d.getTime() / ms)})                      
                     }
                     let m = d.getMonth() + incr;
                     let y = d.getFullYear();
@@ -137,7 +128,7 @@ class Graphics {
                     d = new Date(y, m);
                 }
             }
-            return capts;
+            return capts
         }
 
         function yearCaptions() {
@@ -148,7 +139,7 @@ class Graphics {
                 let d = new Date(yearMin, 0);
                 while (d < dateMax) {
                     if (d >= dateMin) {
-                        capts.push({ text: d.getFullYear(), x: toX(d.getTime() / ms) });
+                        capts.push({ text: d.getFullYear(), x: toX(d.getTime() / ms) })
                     }
                     d = new Date(d.getFullYear() + incr, 0);
                 }
