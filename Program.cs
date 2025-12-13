@@ -11,6 +11,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 
+
 var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfiguration>() ?? throw new InvalidOperationException("Jwt configuration is missing or invalid.");
 
 builder.Services.AddSingleton(jwtConfig);
@@ -52,7 +53,9 @@ app.UseHttpsRedirection();
 
 app.UseFileServer();
 app.UseStaticFiles();
-app.UseDefaultFiles("/index.html");
+app.UseDefaultFiles("./index.html");
+
+
 
 
 app.UseDeveloperExceptionPage();

@@ -1,5 +1,5 @@
-﻿import { createApp, reactive } from '/petite-vue.js?module' // 'https://unpkg.com/petite-vue?module'
-import { graphics } from '/graphics.js' 
+﻿import { createApp, reactive } from './petite-vue.js?module' // 'https://unpkg.com/petite-vue?module'
+import { graphics } from './graphics.js' 
                 
 const app = reactive({
 
