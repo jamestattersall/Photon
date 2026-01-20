@@ -1,4 +1,4 @@
-﻿###Photon - A minimal web application to access data copied from a Proton database.###
+##Photon - A minimal web application to access data copied from a Proton database.##
 
 Requires an MSSQL databse in EAV format, copied from a Proton system.
 See https://github.com/jamestattersall/Proton2Mssql
