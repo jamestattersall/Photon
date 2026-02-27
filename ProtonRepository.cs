@@ -151,19 +151,38 @@ namespace Photon;
             return vs;
         }
 
-        public IEnumerable<Index> GetIndexes(int indexTypeId, int page = 0, int nRows = 16, string? searchterm = "")
+    public IEnumerable<Index> GetIndexes(int indexTypeId, int page = 0, int nRows = 16, string? searchTerm = "")
+    {
+       
+        int eid = 0;
+        if (int.TryParse(searchTerm.Trim(), out eid))
         {
+
+            return GetResult<Index>(
+            @"
+            SELECT Term, EntityId 
+            FROM Indexes 
+            WHERE IndexTypeId=@IndexTypeId 
+                AND EntityId = @entityId 
+            ",
+                new { IndexTypeId = indexTypeId, entityId = eid }
+            );
+        }
+  
+        
+        else { 
             return GetResult<Index>(
                 @"
-    SELECT Term, EntityId 
-    FROM Indexes 
-    WHERE IndexTypeId=@IndexTypeId 
-        AND Term LIKE @term + '%'
-    ORDER BY Term
-    OFFSET @startRow ROWS 
-    FETCH NEXT @Nrows ROWS ONLY",
-                new { IndexTypeId = indexTypeId, term = searchterm, StartRow = page * nRows, Nrows = nRows }
-            );
+            SELECT Term, EntityId 
+            FROM Indexes 
+            WHERE IndexTypeId=@IndexTypeId 
+                AND Term LIKE @term + '%'
+            ORDER BY Term
+            OFFSET @startRow ROWS 
+            FETCH NEXT @Nrows ROWS ONLY",
+                    new { IndexTypeId = indexTypeId, term = searchTerm, StartRow = page * nRows, Nrows = nRows }
+                ); 
+            }
         }
 
         public IEnumerable<DatedValue> GetDatedValues(int entityId, short attributeId)
@@ -313,6 +332,7 @@ public class AttributeConfig
         public string? Comment { get; set; }
         public required string DataType { get; set; }
         public string? LookupType { get; set; }
+        public int? LookupTypeId { get; set; }
         public float? Max { get; set; }
         public float? Min { get; set; }
         public short? Quark { get; set; }

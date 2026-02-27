@@ -53,7 +53,7 @@ app.UseHttpsRedirection();
 
 app.UseFileServer();
 app.UseStaticFiles();
-app.UseDefaultFiles("./index.html");
+app.UseDefaultFiles("/index.html");
 
 
 

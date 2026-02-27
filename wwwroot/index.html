@@ -27,11 +27,12 @@
                        @keyup.self="indexSearchChanged" @input="indexSearchChanged"
                        :placeholder="indexType.name" id="#searchEntity" />
             </foreignObject>
-
-            <text v-for="(i, ix) in indexes" class="input"
-                  x="10" :y="ix*20 + 80" v-bind:class="[(i.entityId == entityId) ? 'selected' : 'input']"
-                  @click="setEntity(i.entityId)">{{i.term}}</text>
-
+            <g v-for="(i, ix) in indexes">
+                <text  x="10" :y="ix*20 + 80" 
+                      v-bind:class="[(i.entityId == entityId) ? 'selected' : 'input']"
+                      @click="setEntity(i.entityId)">{{i.term}}</text>
+                <title>EntityId: {{i.entityId}}</title>
+            </g>
             <text class="caption clickable" @click="getIndexPreviousPage" x="10" y="470" v-show="indexesPage>0">&lt;BACK</text>
             <text class="caption clickable" @click="getIndexNextPage" x="110" y="470" v-show="indexes?.length==19">NEXT&gt;</text>
 
@@ -97,8 +98,14 @@
 
                 <g v-show="attributeConfig.lookups?.length > 0">
                     <text class="caption" x="2" y="140">Lookup type:</text>
-                    <text class="caption" x="2" y="155">{{attributeConfig.lookupType}}</text>
-                    <text v-for="(l ,ix) in attributeConfig.lookups" class="value" x="2" :y="170+ix*15">{{l.name}}</text>
+                    <g>
+                        <text class="caption" x="2" y="155">{{attributeConfig.lookupType}}</text>
+                        <title>LookupTypeId:{{attributeConfig.lookupTypeId}}</title>
+                    </g>
+                    <g v-for="(l ,ix) in attributeConfig.lookups" >
+                        <text class="value" x="2" :y="170+ix*15">{{l.name}}</text>
+                        <title>{{l.id}}: {{l.name}}</title>
+                    </g>
 
                     <text class="caption clickable" @click="previousLookups" x="10" y="470" v-show="lookupsPage>0">&lt;BACK</text>
                     <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups?.length==20">NEXT&gt;</text>
@@ -113,7 +120,8 @@
     <!--The main view. reprersenting a 5:3 aspect rato. 80 caracters wide
         24 lines of characters, double line spacing = 48 characters high
         monospace font also has 5:3 aspect ratio (1.6666)
-        set font size 1.66666 so character width=1/80 screen width  -->
+        set font size 1.66666 so character width=1/80 screen width  
+        i.e. macthing DEC VT52-VT100 VDUs in 24 lines mode from c 1975 -->
 
     <svg viewBox="0 0 80 48" class="main" preserveAspectRatio="none"
          font-size="1.6666666" v-if="mode>0">
@@ -219,6 +227,7 @@
     </svg>
 
     <style>
+
         line.grid {
             stroke-width: 0.1;
             stroke: grey;
@@ -354,5 +363,6 @@
         }
 
     </style>
+
 </body>
 </html>

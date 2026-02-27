@@ -462,19 +462,20 @@ const app = reactive({
                 return
             default:
         }
+        if (!this.isAdvanced) {
+            if (Number.isNaN(e.key)) return
+            let keyMap = [6, 7, 8, 3, 4, 5, 0, 1, 2]
+            let menuId = keyMap[e.key - 1]
+            if (menuId === undefined) return
+            let menuItem = this.menu.menuItems.find(i => i.seq == menuId)
+            if (menuItem === undefined) {
+                return;
+            }
+            if (menuItem !== null) {
 
-        if (Number.isNaN(e.key)) return
-        let keyMap = [6, 7, 8, 3, 4, 5, 0, 1, 2]
-        let menuId = keyMap[e.key - 1]
-        if (menuId === undefined) return
-        let menuItem = this.menu.menuItems.find(i => i.seq == menuId)
-        if (menuItem === undefined) {
-            return;
-        }
-        if (menuItem !== null) {
-
-            //document.getElementById("#searchEntity").blur();
-            this.doMenuItem(menuItem)
+                //document.getElementById("#searchEntity").blur();
+                this.doMenuItem(menuItem)
+            }
         }
     },
     viewCaption(text) {
