@@ -26,7 +26,7 @@ namespace Photon;
             var encrypted = Decrypt(pwd);
             var userStarter = GetResult<UserStarter>("SELECT * FROM UserStarters WHERE UserCode COLLATE Latin1_General_CS_AS = @userCode COLLATE Latin1_General_CS_AS",
                 new { userCode = encrypted }).FirstOrDefault();
-            userStarter?.Menu = GetMenu(userStarter.MenuId);
+            userStarter?.Menu = GetMenu(userStarter.Parameter);
 
             return userStarter;
         }
@@ -48,10 +48,10 @@ namespace Photon;
             );
         }
 
-    public IEnumerable<ViewValue> GetViewValues2(int viewId, int entityId, int page = 0)
+    public IEnumerable<ViewValue2> GetViewValues2(int viewId, int entityId, int page = 0)
     {
-        return GetResult<ViewValue>(
-            "SELECT attributeId, Value Text, Seq  FROM GetViewValues2(@viewId, @entityId, @page) order by attributeId",
+        return GetResult<ViewValue2>(
+            "SELECT attributeId, Seq, Value Text  FROM GetViewValues2(@viewId, @entityId, @page)",
             new { ViewId = viewId, EntityId = entityId, Page = page }
         );
     }
@@ -61,7 +61,7 @@ namespace Photon;
             using var cn = new SqlConnection(_connectionString);
 
             using var multi = cn.QueryMultiple(@$"
-    SELECT a.Id,  a.Name, a.Comment, t.Name [DataType] , [Max], [Min], a.LookupTypeId, lt.Name LookupType, a.Quark
+    SELECT a.Id,  a.Name, a.Comment, t.Name [DataType] , [Max], [Min], a.LookupTypeId, lt.Name LookupType, a.Quark, a.DateAttributeId
     FROM Attributes a 
     LEFT JOIN DataTypes t on t.Id=a.DataTypeId
     LEFT JOIN LookupTypes lt on lt.Id=a.LookupTypeId
@@ -133,7 +133,7 @@ namespace Photon;
         public IEnumerable<View> GetViews(int entityTypeId)
         {
             var vs = GetResult<View>(@"
-    SELECT v.Id, v.Name, v.nRows, case when t.DateAttributeId > 0 then 1 else 0 end as isDated
+    SELECT v.Id, v.Name, v.nRows, t.DateAttributeId
     FROM Views v
     INNER JOIN Tables t ON t.Id = v.TableId
     WHERE t.EntityTypeId = @entityTypeId
@@ -206,13 +206,13 @@ namespace Photon;
 
             using var multi = cn.QueryMultiple($@"
     SELECT Id, Name FROM Menus WHERE Id=@Id
-    SELECT Seq, Name, [Function], Parameter1, NextMenuId, StartMenuId
+    SELECT Seq, Name, Priv1, [Function], Parameter1, NextMenuId, StartMenuId
     FROM MenuItems 
     WHERE MenuId=@Id
     AND Seq < 9
     AND LEN([Name]) > 0
     AND (
-            [Function] IN('SCRN', 'CHGE', '1', '2', '3') 
+            [Function] IN('SCRN', 'CHGE', '1', '2', '3', '5', '6') 
             OR NextMenuId <> 0 
             OR StartMenuId <> 0
         )
@@ -320,10 +320,12 @@ namespace Photon;
 
 public class ViewValue2
 {
-    public required string Text { get; set; }
     public short AttributeId { get; set; }
     public int Seq { get; set; }
+    public required string Text { get; set; }
 }
+
+
 
 public class AttributeConfig
     {
@@ -336,6 +338,7 @@ public class AttributeConfig
         public float? Max { get; set; }
         public float? Min { get; set; }
         public short? Quark { get; set; }
+        public short? DateAttributeId { get; set; }
         public IEnumerable<IndexType> Lookups { get; set; } = [];
     }
 
@@ -363,7 +366,7 @@ public class AttributeConfig
         public int Id { get; set; }
         public string? Name { get; set; }
         public byte NRows { get; set; }
-        public bool IsDated { get; set; }
+        public short? DateAttributeId { get; set; }
         public IEnumerable<ViewText> Captions { get; set; } = [];
         public IEnumerable<ViewAttribute> ViewAttributes { get; set; } = [];
     }
@@ -386,9 +389,19 @@ public class AttributeConfig
 
     public class UserStarter
     {
-        public int MenuId { get; set; }
+        public int Priv { get; set; }
+        public int FunctionId { get; set; }
+        public int Parameter { get; set; }
         public int EntityTypeId { get; set; }
         public int IndexTypeId { get; set; }
+
+        public int MenuId 
+        { get 
+            {
+                if (FunctionId == 0) return Parameter;
+                else return 0;
+            } 
+        }
         public Menu? Menu { get; set; }
     }
 
@@ -403,10 +416,22 @@ public class AttributeConfig
     {
         public byte Seq { get; set; }
         public required string Name { get; set; }
+        public byte Priv1 { get; set; }
+        public byte Priv2 { get; set; }
         public string? Function { get; set; }
+        public byte Flags { get; set; }
         public int? Parameter1 { get; set; }
+        public int? Parameter2 { get; set; }
+        public int? Parameter3 { get; set; }
+        public int? Parameter4 { get; set; }
         public int? NextMenuId  { get; set; }
         public int? StartMenuId { get; set; }
+        public bool ForEdit 
+        { get
+            {
+            return (Flags & 32) == 32;
+            } 
+        }
     }
 
     public class SqlDateOnlyTypeHandler : SqlMapper.TypeHandler<DateOnly>

@@ -129,27 +129,50 @@
         <line x1="0" y1="41" x2="80" y2="41"></line>
         <line x1="40" y1="41" x2="40" y2="48"></line>
         <line x1="0" y1="0" x2="0" y2="48"></line>
-        <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
-        
+        <g>
+            <!-- patient ID banner -->
+            <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
+            <title>EntityId: {{entityId}}</title>
+        </g>
         <g v-show="!graphAttribute">
             <!--Tabular area-->
             <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2" v-html="viewCaption(c.text)"></text>
-            <text class="value" v-for="v in values" :x="v.x" :y="v.y*2">{{v.text}}</text>
-            <rect v-for="a in view.viewAttributes" :height="(view.nRows) * 2 - 0.33333" :width="a.displayLength"
-                  :class="selectTargetClass(a)"
-                  :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a)">
-               <title>{{selectTooltip(a)}}</title>
-            </rect> />
+            <g v-if="editable">
+                <g v-for="a in activeAttributes">
+                    <foreignObject v-for="v in a.values" class="text" :x="a.x" :width="a.displayLength" height="1.666"
+                                   :y="2*(a.y + v.seq - view.nRows * page -1) -1.666">
+                        <input type="text" class="text" v-model="v.text" />
+                    </foreignObject>     
+                </g>
+            </g>
+            <g v-else>
+                <g v-for="a in activeAttributes">
+                    <text class="value" :x="a.x"
+                          v-for="v in a.values"
+                          :y="2*(a.y + v.seq - view.nRows * page -1)">
+                        {{v.text}}
+                    </text>
+
+                    <rect :height="(view.nRows) * 2 - 0.33333" :width="a.displayLength"
+                          :class="selectTargetClass(a)"
+                          :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a)">
+                        <title>{{selectTooltip(a)}}</title>
+                    </rect>
+                </g>
+
+            </g>
+
+
             <text v-show="nPages>1" class="value" x="26" y="43">{{page + 1}}/{{nPages}}</text>
             <text class="caption" x="1" y="43">{{menu?.name}}</text>
             <text :class="[i.isSelected? 'selected': 'input']" v-for="i in menu.menuItems"
                   :y="Math.floor(i.seq / 3) * 2 + 43"
                   :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
         </g>
-        <g v-show="graphAttribute">
-            <!-- graph area -->
+    <g v-show="graphAttribute">
+        <!-- graph area -->
             <svg x="0" y="3" width="80" height="38"
-                 viewBox="0 0 80 34" preserveAspectRatio="none" class="outer" >
+                 viewBox="0 0 80 34" preserveAspectRatio="none" class="outer">
                 <g v-show="graphData.plotPath.trim() != ''">
                     <rect width="100%" height="100%" class="outer" />
                     <!-- plot area -->
@@ -197,7 +220,7 @@
 
                     <rect x="0" y="0" height="100" width="100" fill="white" stroke="black" stroke-width="5" />
                     <polyline v-show="isConfig" points="0,50 40,100 100,0"
-                                style="fill:none;stroke:red;stroke-width:20" />
+                              style="fill:none;stroke:red;stroke-width:20" />
                 </svg>
                 <text x="19" y="43" :class="[(isConfig)? 'selected': 'input']">config</text>
             </g>
@@ -227,9 +250,26 @@
     </svg>
 
     <style>
-
+        foreignObject.text{
+            padding-inline-start:0;
+            border:0;
+            margin: 0 0 0 0;
+            line-padding: 0;
+            height:1.666px;
+            vertical-align:central;
+        }
+        input.text {
+            border: none;
+            border-width: 0;
+            font-size: 1.6666px;
+            height: 100%;
+            width: 100%;
+            margin: 0 0 0 0;
+            padding-inline-start:0.333px;
+            padding-inline-end:0;
+        }
         line.grid {
-            stroke-width: 0.1;
+            stroke-width: 0.1px;
             stroke: grey;
         }
 
@@ -239,11 +279,11 @@
 
         text.axis {
             fill: white;
-            font-size: 1.6666;
+            font-size: 1.6666px;
         }
 
         svg polyline {
-            stroke-width: 0.2;
+            stroke-width: 0.2px;
             fill: none;
             stroke: red;
         }
@@ -255,7 +295,7 @@
         rect.plotArea {
             fill: hsl(from navy h s calc(l + 10));
             stroke: white;
-            stroke-width: 0.2;
+            stroke-width: 0.2px;
         }
         svg {
             height: 100vh;
@@ -289,7 +329,7 @@
 
         line {
             stroke: grey;
-            stroke-width: 0.1;
+            stroke-width: 0.1px;
         }
 
         text.value {

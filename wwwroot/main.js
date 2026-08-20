@@ -7,6 +7,9 @@ const app = reactive({
     view: {},
     views: [],
     viewsPage: 0,
+    editable: false,
+    originalAttributes: [],
+    activeAttributes: [],
     viewSearch: '',
     indexType: {},
     indexTypePage: 0,
@@ -118,7 +121,7 @@ const app = reactive({
         this.indexType = indexType
     },
     async getIndexes() {
-        if (this.indexSearch?.length >= 3) {
+        if (this.indexSearch?.length >= 3 || typeof this.indexSearch === 'number') {
             await fetchWrapper
                 .get('Indexes/' + this.indexType.id + ',' + this.indexesPage + ',19' + '/' + this.indexSearch)
                 .then((data) => {
@@ -174,12 +177,14 @@ const app = reactive({
     },
     nextPage() {
         if (this.page < this.nPages - 1) {
+            this.activeAttributes.forEach(a => { a.values = []; })
             this.page++;
             this.getMainValues()
         }
     },
     previousPage() {
         if (this.page > 0) {
+            this.activeAttributes.forEach(a => { a.values = []; })
             this.page--;
             this.getMainValues()
         }
@@ -240,11 +245,31 @@ const app = reactive({
             })
             .catch((error) => console.error(error));
     },
-    async getMainValues() {
+    async getMainValues_0() {
         fetchWrapper
             .get('ViewValues/' + this.view.id + ',' + this.entityId + ',' + this.page)
             .then((values) => this.values = values)
             .catch((error) => console.error(error));
+    },
+    async getMainValues() {
+        try {
+            const url = `ViewValues2/${this.view.id},${this.entityId},${this.page}`;
+
+            const vals = await fetchWrapper.get(url) || [];
+            //console.log(JSON.stringify(vals, null, 2));
+            const valuesMap = Map.groupBy(vals, v => v.attributeId);
+
+            for (let a of this.activeAttributes) {
+                a.values = valuesMap.get(a.attributeId) || [];
+            };
+            console.log(JSON.stringify(this.activeAttributes, null, 2));
+
+            this.editable = false;
+
+        } catch (error) {
+            console.error("Error fetching or mapping data:", error);
+        }
+
     },
     selectTargetClass(a) {
         if (this.isConfig) {
@@ -291,16 +316,65 @@ const app = reactive({
     setView(view) {
         this.view = view
         this.graphAttribute = null
+        this.activeAttributes = structuredClone(JSON.parse(JSON.stringify(this.view.viewAttributes)))
         this.page = 0
-        if (this.view.isDated && this.menu.menuItems?.length === 0) {
+        if (this.view.dateAttributeId > 0 && this.menu.menuItems?.length === 0) {
             this.menu.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
             this.menu.menuItems.push({ "name": "Down screen", "function": "3", "seq": 2, "nextMenuId": 0, "startMenuId": 0 })
         }
         if (this.entityId > 0) {
-            this.getMainValues()
-            this.getNPages()
+            this.getMainValues();
+            this.getNPages();
         }
     },
+    setEditable() {
+        const dateAttr = this.activeAttributes.find(da => da.attributeId === this.view.dateAttributeId);
+        const rowCount = dateAttr?.values?.length || 1;
+        (this.activeAttributes || []).forEach(att => {
+          //  const valuesToGroup = att.values || [];
+         //   const mapVals = Map.groupBy(valuesToGroup, x => x.seq);
+            const startRow = (this.page) * this.view.nRows + 1;
+            let nRows = this.view.nRows;
+            if (rowCount < nRows) { nRows = rowCount; };
+            const endRow = startRow + nRows ;
+            for (let i = startRow ; i < endRow; i++) {
+                if (att.values.find(v => v.seq === i) === undefined) {
+                    //att.values = att.values || [];
+                    att.values.push({ attributeId: att.attributeId, seq: i, text: null });
+                }
+            }
+        });
+        this.originalAttributes = structuredClone(JSON.parse(JSON.stringify(this.activeAttributes)));
+
+        this.editable = true;
+    },
+
+    saveEdits() {
+        if (!this.editable) return;
+
+        let editedValues = [];
+
+        this.activeAttributes.forEach((aAtt,ix) => {
+            let oAtt = this.originalAttributes[ix];
+
+            aAtt.values.forEach(aVal => {
+                let oVal = oAtt.values.find(v => v.seq === aVal.seq );
+
+                if (oVal.text !== aVal.text) {
+                    editedValues.push({
+                        attributeId: aAtt.attributeId,
+                        seq: aVal.seq,
+                        originalText: oVal.text,
+                        newText: aVal.text
+                    });
+                }
+            });
+        });
+        this.editable = false;
+        console.log(JSON.stringify(editedValues));
+    },
+
+
     setEntity(entityId) {
         this.entityId = entityId
         this.page = 0
@@ -359,7 +433,7 @@ const app = reactive({
                 .then((data) => {
                     if (data.menuItems?.length === 0) {
                         data.menuItems.push({ "name": "Prev. menu", "function": "", "seq": 3, "nextMenuId": -2, "startMenuId": 0 })
-                        if (this.view.isDated) {
+                        if (this.view.dateAttributeId > 0) {
                             data.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
                             data.menuItems.push({ "name": "Down screen", "function": "3", "seq": 2, "nextMenuId": 0, "startMenuId": 0 })
                         }
@@ -387,6 +461,7 @@ const app = reactive({
         switch (item.function) {
             case 'SCRN':
                 this.setView(this.entityType.views.find(v => v.id == item.parameter1))
+                if(item.flags & 32 === 32) this.setEditable();
                 break;
             case 'CHGE':
                 this.setEntityType(this.entityTypes.find(e => e.id == item.parameter1))
@@ -405,6 +480,14 @@ const app = reactive({
             case '3':
                 this.nextPage()
                 break;
+
+            case '5':
+                this.setEditable();
+                break;
+
+            case '6':
+                this.saveEdits();
+                break;
             default:
             // code block
         }
@@ -420,7 +503,7 @@ const app = reactive({
             this.menu = JSON.parse('{ "id":0, "name":"ADVANCED","menuItems":[]}')
             this.mode = 2
             this.getViews()
-            if (this.view.isDated && this.menu.menuItems.length === 0) {
+            if (this.view.dateAttributeId > 0 && this.menu.menuItems.length === 0) {
                 this.menu.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
                 this.menu.menuItems.push({ "name": "Down screen", "function": "3", "seq": 2, "nextMenuId": 0, "startMenuId": 0 })
             }
@@ -455,14 +538,16 @@ const app = reactive({
                 this.goHome()
                 return
             case "0":
-                let timer = setTimeout(() => {
-                    document.getElementById("#searchEntity").focus();
-                }, 500);
-                this.mode = 1
+                if (this.mode != 1 && !this.editable) {
+                    let timer = setTimeout(() => {
+                        document.getElementById("#searchEntity").focus();
+                    }, 500);
+                    this.mode = 1
+                }
                 return
             default:
         }
-        if (!this.isAdvanced) {
+        if (!this.isAdvanced && !this.editable) {
             if (Number.isNaN(e.key)) return
             let keyMap = [6, 7, 8, 3, 4, 5, 0, 1, 2]
             let menuId = keyMap[e.key - 1]

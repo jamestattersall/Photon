@@ -81,6 +81,9 @@ app.MapGet("/AttributeUse/{attributeId}", (int attributeId) =>
 app.MapGet("/ViewValues/{viewId},{entityid},{page}", ( int viewId, int entityId, int page=0) =>
     repository.GetViewValues( viewId, entityId, page)).RequireAuthorization();
 
+app.MapGet("/ViewValues2/{viewId},{entityid},{page}", (int viewId, int entityId, int page = 0) =>
+    repository.GetViewValues2(viewId, entityId, page)).RequireAuthorization();
+
 app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", ( int indexTypeId, string? searchterm, int page = 0, int nRows = 16) =>
     repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
 
@@ -113,7 +116,7 @@ app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authe
         {
             return Results.BadRequest(new { message = "Password does not match any in Proton." });
         }
-        userStarter.Menu = repository.GetMenu(userStarter.MenuId);
+        //userStarter.Menu = repository.GetMenu(userStarter.MenuId);
 
         // Generate JWT token
         var token = identityService.GenerateToken(userName!);
