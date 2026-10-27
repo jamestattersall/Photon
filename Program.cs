@@ -1,7 +1,7 @@
-using Photon.Jwt;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
+using Photon.Jwt;
 using Photon.Models;
 
 
@@ -52,11 +52,25 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseFileServer();
-app.UseStaticFiles();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        OnPrepareResponse = ctx =>
+        {
+            ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+            ctx.Context.Response.Headers.Append("Pragma", "no-cache");
+            ctx.Context.Response.Headers.Append("Expires", "0");
+        }
+    });
+}
+else
+{
+    app.UseStaticFiles();
+}
+
 app.UseDefaultFiles("/index.html");
-
-
-
 
 app.UseDeveloperExceptionPage();
 
@@ -69,32 +83,41 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 Photon.ProtonRepository repository = new(connectionString);
 
-app.MapGet("/EntityTypes",() =>  
-    repository.GetEntityTypes()).RequireAuthorization();
+app.MapGet("/EntityTypes", async () =>
+    await repository.GetEntityTypes()).RequireAuthorization();
 
-app.MapGet("/AttributeConfig/{attributeId}", (int attributeId) =>
-    repository.GetAttributeConfig(attributeId)).RequireAuthorization();
+app.MapGet("/FilteredLookups/{attributeId},{searchTerm},{nRows}", async (int attributeId, string? searchTerm, int nRows) =>
+    await repository.GetFilteredLookups(attributeId, searchTerm, nRows)).RequireAuthorization();
 
-app.MapGet("/AttributeUse/{attributeId}", (int attributeId) =>
-    repository.GetAttributeUse(attributeId)).RequireAuthorization();
+app.MapGet("/AttributeConfig/{attributeId}", async (int attributeId) =>
+    await repository.GetAttributeConfig(attributeId)).RequireAuthorization();
 
-app.MapGet("/ViewValues/{viewId},{entityid},{page}", ( int viewId, int entityId, int page=0) =>
-    repository.GetViewValues( viewId, entityId, page)).RequireAuthorization();
+app.MapGet("/AttributeUse/{attributeId}", async (int attributeId) =>
+    await repository.GetAttributeUse(attributeId)).RequireAuthorization();
 
-app.MapGet("/ViewValues2/{viewId},{entityid},{page}", (int viewId, int entityId, int page = 0) =>
-    repository.GetViewValues2(viewId, entityId, page)).RequireAuthorization();
+app.MapGet("/ViewValues/{viewId},{entityid},{page}", async (int viewId, int entityId, int page = 0) =>
+    await repository.GetViewValues(viewId, entityId, page)).RequireAuthorization();
 
-app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", ( int indexTypeId, string? searchterm, int page = 0, int nRows = 16) =>
-    repository.GetIndexes( indexTypeId, page, nRows, searchterm)).RequireAuthorization();
+app.MapGet("/IdValues/{viewId},{entityid}", async (int viewId, int entityId) =>
+    await repository.GetIdValues(viewId, entityId)).RequireAuthorization();
 
-app.MapGet("/lookups/{attributeId},{page},{nRows}", (int attributeId, int page, int nRows) =>
-    repository.GetLookups(attributeId, page, nRows)).RequireAuthorization();
+app.MapGet("/LongText/{entityId},{attributeId},{seq}", async (int entityId, int attributeId, int seq) =>
+{
+    var data = await repository.GetLongText(entityId, attributeId, seq);
+    return Results.Ok(new { text = data });
+}).RequireAuthorization();
 
-app.MapGet("/DatedValues/{entityId},{attributeId}",( int entityId, short attributeId) =>
-    repository.GetDatedValues( entityId, attributeId)).RequireAuthorization();
+app.MapGet("/Indexes/{indexTypeId},{page},{nRows}/{searchterm}", async (int indexTypeId, string searchterm = "", int page = 0, int nRows = 16) =>
+    await repository.GetIndexes(indexTypeId, page, nRows, searchterm)).RequireAuthorization();
+
+app.MapGet("/lookups/{attributeId},{page},{nRows}", async (int attributeId, int page, int nRows) =>
+    await repository.GetLookups(attributeId, page, nRows)).RequireAuthorization();
+
+app.MapGet("/DatedValues/{entityId},{attributeId}", (int entityId, short attributeId) =>
+    repository.GetDatedValues(entityId, attributeId)).RequireAuthorization();
 
 app.MapGet("/NPages/{viewId},{entityId}", (short viewId, int entityId) =>
-    repository.NPages( viewId, entityId)).RequireAuthorization();
+    repository.NPages(viewId, entityId)).RequireAuthorization();
 
 app.MapGet("/Menu/{Id}", (short id) =>
     repository.GetMenu(id)).RequireAuthorization();
@@ -108,15 +131,15 @@ app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authe
         return Results.BadRequest(new { message = "password is required." });
     }
     if (context.User.Identity != null && context.User.Identity.IsAuthenticated)
-    { 
+    {
         var userName = context.User.Identity.Name;
-        var userStarter = repository.TryLogin( request.Password);
+        var userStarter = await repository.TryLogin(request.Password);
 
         if (userStarter == null)
         {
             return Results.BadRequest(new { message = "Password does not match any in Proton." });
         }
-        //userStarter.Menu = repository.GetMenu(userStarter.MenuId);
+        //userStarter.Menu = await repository.GetMenu(userStarter.MenuId);
 
         // Generate JWT token
         var token = identityService.GenerateToken(userName!);
@@ -134,5 +157,6 @@ app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authe
     return Results.BadRequest(new { message = "User must be logged in to Windows." });
 })
 .RequireAuthorization();
+
 
 app.Run();

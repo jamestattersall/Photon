@@ -1,15 +1,17 @@
 ﻿import { createApp, reactive } from './petite-vue.js?module' // 'https://unpkg.com/petite-vue?module'
-import { graphics } from './graphics.js' 
-                
-const app = reactive({
+import { graphics } from './graphics.js'
 
+const app = reactive({
+    charWidth: 12, // number of arbitary screen units in one monotype character width
+    fontSize: 20,  // a.k.a font height = charWidth * 5/3 for monotype font
+    lineHeight: 24, // space between lines = charWidth * 2 on a DEC VT-100
+    editingValue: null,
     entityType: {},
     view: {},
     views: [],
+    attribute: {},
+    value: {},
     viewsPage: 0,
-    editable: false,
-    originalAttributes: [],
-    activeAttributes: [],
     viewSearch: '',
     indexType: {},
     indexTypePage: 0,
@@ -18,32 +20,81 @@ const app = reactive({
     indexSearch: '',
     entityTypes: [],
     entityId: 0,
-    values: [],
     idValues: [],
     page: 0,
     nPages: 0,
-    userStarter: null,
-    pwd: "",
+    userStarter: { id: 1, functionId: 1, priv: 255, parameter: 50, entityTypeId: 1, idLineViewId: 128, indexTypeId: 1 },
+    pwd: 'UFCCL',
     loginMessage: "",
     loadMessage: "",
     menu: { id: 0, name: "", menuItems: [] },
     menuHistory: [],
-    row: 0,
-    mode: 0,
+    sideMode: 0,
+    mainMode: 1,
     isAdvanced: false,
     isConfig: false,
+    isEditable: false,
     attributeConfig: { id: 0 },
-    attributeUse: new attributeUse(),
+    attributeUse: new AttributeUse(),
     lookupsPage: 0,
-    graphAttribute: null,
     graphData: graphics,
+    longText: '',
+    valueClicked(a, v) {
+        if (this.isEditable) {
+            this.edit(a, v)
+        }
+        else if (a.dataTypeId == 2 || a.dataTypeId == 7) {
+            this.graph(a);
+        }
+        else if (a.dataTypeId == 6) {
+            this.showLongText(v)
+        }
+    },
+    showLongText(v) {
+        this.getLongText(v)
+        this.mainMode = 3;
+    },
+    async edit(a, v) {
+        var vm = this;
+        var dl = a.dataTypeId === 4 ? a.displayLength + 5 : a.displayLength;
+
+        var ac = {
+            id: a.attributeId,
+            x: a.x,
+            dataTypeId: a.dataTypeId,
+            displayLength: dl
+        }
+
+        if (a.dataTypeId == 3) {
+            await vm.getLookups(a.attributeId, 0, 12)
+            let ll = this.lookups.length
+            let lo = vm.lineOrdinal(a, v.seq) - 1
+            ac.height = (ll > 10) ? 10 : ll
+            ac.y = lo
+            if (ac.height + ac.y > 21) {
+                ac.y = 21 - ac.height
+            }
+        } else {
+            ac.y = vm.lineOrdinal(a, v.seq) - 1
+            ac.height = 1
+        }
+
+        this.attribute = ac;
+        this.editingValue = v;
+    },
     nextLookups() {
         this.lookupsPage++
-        this.getLookups()
+        this.getLookups(this.attribute.id, this.lookupsPage, 20)
+
     },
     previousLookups() {
         this.lookupsPage--
-        this.getLookups()
+        this.getLookups(this.attribute.id, this.lookupsPage, 20)
+    },
+    lookupClicked(lookup) {
+        let nm = lookup.name.substring(0, this.attribute.displayLength)
+        this.value.text = nm;
+        this.value.lookupId = lookup.id;
     },
     get viewStart() {
         return this.viewsPage * 19
@@ -56,7 +107,7 @@ const app = reactive({
         this.loginMessage = "";
         this.userStarter = null;
         this.menuHistory = [];
-        this.mode = 0;
+        this.sideMode = 0;
         this.pwd = "";
     },
     tryLogin() {
@@ -69,19 +120,64 @@ const app = reactive({
         this.loginMessage = 'Checking password..'
         fetchWrapper
             .post('login', { password: this.pwd })
-            .then((values) => {
-                if (values == null) {
+            .then((data) => {
+                if (data == null) {
                     this.loginMessage = 'Invalid password'
                 } else {
                     this.loginMessage = "Login succeeded. Loading..";
-                    this.userStarter = values.userStarter
-                    fetchWrapper.token = values.token
+                    this.userStarter = data.userStarter
+                    fetchWrapper.token = data.token
+                    console.log('token: ' + data.token)
                     this.getEntityTypes();
                     resetLoginTimer()
                 }
             })
             .catch((error) => console.error(error));
 
+    },
+    //init() {
+    //  this.tryLogin();
+    //},
+    getFormattedDate(date, a) {
+        //console.log(JSON.stringify(date));
+        date = date ?? '';
+        if (date.length < 8) return '';
+
+        let [year, month, day] = date.split('-');
+        if (a.displayLength < 10) {
+            year = year.substring(2, 4)
+        }
+        return `${day}.${month}.${year}` ?? '';
+    },
+    handleCompositeInput(e, v) {
+        let raw = e.target.value;
+
+        raw = raw.replace(/[^<>0-9.]/g, '');
+
+        // 2. Ensure < or > can only appear at the very beginning
+        raw = raw.replace(/(?!^)[<>]/g, '');
+
+        raw = raw.replace(/^([<>])[<>]+/g, '$1');
+
+        raw = raw.replace(/(?<=\d)[^\d.]+/g, '');
+
+        raw = raw.replace(/(?<=\..*)\.$/, '')
+        v = raw;
+        e.target.value = raw;
+    },
+    handleCompositeTime(e) {
+        const value = e.target.value;
+        // 1. Regex for progressive matching (allows building 'PRE', 'POST', or 'hh:mm')
+        // Supports typing 'P' -> 'PR' -> 'PRE', or '1' -> '12' -> '12:' -> '12:3' -> '12:34'
+        const progressiveRegex = /^(?:P(?:R(?:E)?)?|P(?:O(?:S(?:T)?)?)?|(?:[01]\d?|2[0-3]?)(?::[0-5]?\d?)?)$/;
+
+        // 2. If empty, or if it matches the allowed progressive pattern, accept it
+        if (value === '' || progressiveRegex.test(value)) {
+            this.editingValue.text = value;
+        } else {
+            // 3. Reject the change: force the input element back to the last valid state
+            e.target.value = this.editingValue.text;
+        }
     },
     getEntityTypes() {
         fetchWrapper
@@ -94,13 +190,17 @@ const app = reactive({
             })
             .catch((error) => console.log('error1' + error));
     },
-    getLookups() {
-        fetchWrapper
-            .get('Lookups/' + this.attributeConfig.id + ',' + this.lookupsPage + ',20')
+    async getLookups(attributeId, page, rows) {
+        return await fetchWrapper
+            .get('Lookups/' + attributeId + ',' + page + ',' + rows)
             .then(data => {
-                this.attributeConfig.lookups = data
+                console.log('lookups:' + JSON.stringify(data));
+                this.lookups = data
             })
-            .catch((error) => console.log('error1' + error));
+            .catch((error) => {
+                console.log('error1' + error)
+                this.lookups = [];
+            });
     },
     setEntityType(entityType) {
         if (entityType !== this.entityType) {
@@ -111,8 +211,9 @@ const app = reactive({
             this.indexTypePage = 0;
             this.viewSearch = '';
             this.indexSearch = '';
+            this.lookupSearch = '';
             this.clear()
-            this.mode = 1
+            this.sideMode = 1
             this.getIndexes()
             this.getViews()
         }
@@ -121,7 +222,7 @@ const app = reactive({
         this.indexType = indexType
     },
     async getIndexes() {
-        if (this.indexSearch?.length >= 3 || typeof this.indexSearch === 'number') {
+        if (this.indexSearch?.length >= 1 || typeof this.indexSearch === 'number') {
             await fetchWrapper
                 .get('Indexes/' + this.indexType.id + ',' + this.indexesPage + ',19' + '/' + this.indexSearch)
                 .then((data) => {
@@ -177,31 +278,39 @@ const app = reactive({
     },
     nextPage() {
         if (this.page < this.nPages - 1) {
-            this.activeAttributes.forEach(a => { a.values = []; })
+            this.view.activeAttributes.forEach(a => { a.values = []; })
             this.page++;
             this.getMainValues()
         }
     },
     previousPage() {
         if (this.page > 0) {
-            this.activeAttributes.forEach(a => { a.values = []; })
+            this.view.activeAttributes.forEach(a => { a.values = []; })
             this.page--;
             this.getMainValues()
         }
     },
+    showConfig(a) {
+        this.sideMode = 5
+        this.getAttributeConfig(a.attributeId)
+        this.getAttributeUse(a.attributeId)
+    },
     graph(a) {
-        if (this.isConfig) {
-            this.mode = 5
-            this.getAttributeConfig(a.attributeId)
-            this.getAttributeUse(a.attributeId)
-        } else {
-            if (this.entityId > 0 && (a.dataTypeId == 2 || a.dataTypeId == 7)) {
-                this.getDatedValues(a)
-            }
+        if (this.entityId > 0 && (a.dataTypeId == 2 || a.dataTypeId == 7)) {
+
+            fetchWrapper
+                .get('DatedValues/' + this.entityId + ',' + a.attributeId)
+                .then((data) => {
+                    this.graphData.datedValues = data
+                    this.graphData.plot()
+                    this.attribute = a
+                    this.mainMode = 2;
+                })
+                .catch((error) => console.error(error));
         }
     },
     graphZoom(dir) {
-        if (this.graphData && this.graphAttribute) {
+        if (this.graphData && this.mainMode == 2) {
             let zf = this.graphData.zoomFraction
             if (dir > 0 && zf <= 0.5) {
                 zf = zf * 2.0
@@ -212,16 +321,6 @@ const app = reactive({
             this.graphData.zoomFraction = zf
             this.graphData.plot()
         }
-    },
-    async getDatedValues(a) {
-        fetchWrapper
-            .get('DatedValues/' + this.entityId + ',' + a.attributeId)
-            .then((values) => {
-                this.graphData.datedValues = values
-                this.graphData.plot()
-                this.graphAttribute = a
-            })
-            .catch((error) => console.error(error));
     },
     async getAttributeConfig(attributeId) {
         this.loadMessage = "loading.."
@@ -236,7 +335,7 @@ const app = reactive({
     },
 
     async getAttributeUse(attributeId) {
-        this.attributeUse = new attributeUse()
+        this.attributeUse = new AttributeUse()
         fetchWrapper
             .get('AttributeUse/' + attributeId)
             .then((data) => {
@@ -245,52 +344,41 @@ const app = reactive({
             })
             .catch((error) => console.error(error));
     },
-    async getMainValues_0() {
-        fetchWrapper
-            .get('ViewValues/' + this.view.id + ',' + this.entityId + ',' + this.page)
-            .then((values) => this.values = values)
-            .catch((error) => console.error(error));
-    },
     async getMainValues() {
         try {
-            const url = `ViewValues2/${this.view.id},${this.entityId},${this.page}`;
+
+            this.editingValue = null;
+            const url = `ViewValues/${this.view.id},${this.entityId},${this.page}`;
 
             const vals = await fetchWrapper.get(url) || [];
             //console.log(JSON.stringify(vals, null, 2));
             const valuesMap = Map.groupBy(vals, v => v.attributeId);
 
-            for (let a of this.activeAttributes) {
+            for (let a of this.view.activeAttributes) {
                 a.values = valuesMap.get(a.attributeId) || [];
             };
-            console.log(JSON.stringify(this.activeAttributes, null, 2));
+            //console.log(JSON.stringify(this.view.activeAttributes, null, 2));
 
-            this.editable = false;
+            this.isEditable = false;
 
         } catch (error) {
             console.error("Error fetching or mapping data:", error);
         }
-
     },
-    selectTargetClass(a) {
-        if (this.isConfig) {
-            return a.attributeId == this.attributeConfig.id ? 'selected' : 'config'
-        } else if (this.entityId > 0) {
-            return (a.dataTypeId == 2 || a.dataTypeId == 7) ? 'clickable' : 'hidden'
-        }
-        else return 'hidden'
+    async getLongText(v) {
+        fetchWrapper
+            .get(`LongText/${this.entityId},${v.attributeId},${v.seq}`)
+            .then(data => {
+                this.longText = data.text;
+            })
     },
-    selectTooltip(a) {
-        if (this.isConfig) {
-            return 'click here to display config data for ' + a.name
-        } else if (this.entityId > 0) {
-            return a.dataTypeId == 2 || a.dataTypeId == 7 ? 'click here to graph ' + a.name : null
-        }
-        return null
+    lineOrdinal(a, seq) {
+        return (a.y + seq - this.view.nRows * this.page - 1)
     },
     async getIdValues() {
         fetchWrapper
-            .get('ViewValues/' + this.entityType.idlineViewId + ',' + this.entityId + ',0')
-            .then((values) => this.idValues = values)
+            .get('IdValues/' + this.entityType.idlineViewId + ',' + this.entityId)
+            .then((data) => this.idValues = data)
             .catch((error) => console.error(error));
     },
     getViews() {
@@ -315,8 +403,8 @@ const app = reactive({
     },
     setView(view) {
         this.view = view
-        this.graphAttribute = null
-        this.activeAttributes = structuredClone(JSON.parse(JSON.stringify(this.view.viewAttributes)))
+        this.mainMode = 1;
+        this.view.activeAttributes = structuredClone(JSON.parse(JSON.stringify(this.view.viewAttributes)))
         this.page = 0
         if (this.view.dateAttributeId > 0 && this.menu.menuItems?.length === 0) {
             this.menu.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
@@ -328,37 +416,39 @@ const app = reactive({
         }
     },
     setEditable() {
-        const dateAttr = this.activeAttributes.find(da => da.attributeId === this.view.dateAttributeId);
+        if (this.entityId === 0) { return; }
+
+        const dateAttr = this.view.activeAttributes.find(da => da.attributeId === this.view.dateAttributeId);
         const rowCount = dateAttr?.values?.length || 1;
-        (this.activeAttributes || []).forEach(att => {
-          //  const valuesToGroup = att.values || [];
-         //   const mapVals = Map.groupBy(valuesToGroup, x => x.seq);
+        (this.view.activeAttributes || []).forEach(att => {
+            //  const valuesToGroup = att.values || [];
+            //   const mapVals = Map.groupBy(valuesToGroup, x => x.seq);
             const startRow = (this.page) * this.view.nRows + 1;
             let nRows = this.view.nRows;
             if (rowCount < nRows) { nRows = rowCount; };
-            const endRow = startRow + nRows ;
-            for (let i = startRow ; i < endRow; i++) {
+            const endRow = startRow + nRows;
+            for (let i = startRow; i < endRow; i++) {
                 if (att.values.find(v => v.seq === i) === undefined) {
                     //att.values = att.values || [];
                     att.values.push({ attributeId: att.attributeId, seq: i, text: null });
                 }
             }
         });
-        this.originalAttributes = structuredClone(JSON.parse(JSON.stringify(this.activeAttributes)));
+        this.view.originalAttributes = structuredClone(JSON.parse(JSON.stringify(this.view.activeAttributes)));
 
-        this.editable = true;
+        this.isEditable = true;
     },
 
     saveEdits() {
-        if (!this.editable) return;
+        if (!this.isEditable) return;
 
         let editedValues = [];
 
-        this.activeAttributes.forEach((aAtt,ix) => {
-            let oAtt = this.originalAttributes[ix];
+        this.view.activeAttributes.forEach((aAtt, ix) => {
+            let oAtt = this.view.originalAttributes[ix];
 
             aAtt.values.forEach(aVal => {
-                let oVal = oAtt.values.find(v => v.seq === aVal.seq );
+                let oVal = oAtt.values.find(v => v.seq === aVal.seq);
 
                 if (oVal.text !== aVal.text) {
                     editedValues.push({
@@ -370,7 +460,8 @@ const app = reactive({
                 }
             });
         });
-        this.editable = false;
+        this.isEditable = false;
+        this.editingValue = null;
         console.log(JSON.stringify(editedValues));
     },
 
@@ -392,8 +483,8 @@ const app = reactive({
         if (this.entityId > 0) {
             this.getIdValues()
             if (this.view.id > 0) {
-                if (this.graphAttribute) {
-                    this.getDatedValues(this.graphAttribute)
+                if (this.mainMode == 2 && this.attribute) {
+                    this.graph(this.attribute)
                 } else {
                     this.getMainValues()
                     this.getNPages()
@@ -448,10 +539,13 @@ const app = reactive({
         this.menuHistory = []
         this.setEntityType(this.entityTypes.find(t => t.id == this.userStarter.entityTypeId))
         this.setIndexType(this.entityType.indexTypes.find(t => t.id == this.userStarter.indexTypeId))
-        this.mode = 1
+        this.sideMode = 1
         this.viewSearch = ""
         this.isAdvanced = false
-        this.graphAttribute = null
+        this.isConfig = false
+        this.isEditable = false
+        this.mainMode = 1;
+        this.clear
     },
     doMenuItem(item) {
         item.isSelected = true
@@ -461,7 +555,7 @@ const app = reactive({
         switch (item.function) {
             case 'SCRN':
                 this.setView(this.entityType.views.find(v => v.id == item.parameter1))
-                if(item.flags & 32 === 32) this.setEditable();
+                if (item.flags & 32 === 32) this.setEditable();
                 break;
             case 'CHGE':
                 this.setEntityType(this.entityTypes.find(e => e.id == item.parameter1))
@@ -500,8 +594,8 @@ const app = reactive({
     setAdvanced() {
         if (!this.isAdvanced) {
             this.isAdvanced = true
-            this.menu = JSON.parse('{ "id":0, "name":"ADVANCED","menuItems":[]}')
-            this.mode = 2
+            this.menu = JSON.parse('{ "id":0, "name":"ADVANCED", "menuItems":[]}')
+            this.sideMode = 2
             this.getViews()
             if (this.view.dateAttributeId > 0 && this.menu.menuItems.length === 0) {
                 this.menu.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
@@ -512,7 +606,6 @@ const app = reactive({
     clear() {
         this.view = {}
         this.idValues = []
-        this.values = []
     },
     keydown(e) {
         switch (e.key) {
@@ -532,22 +625,22 @@ const app = reactive({
                 this.nextPage()
                 return;
             case "Enter":
-                if (this.mode > 1) this.goHome()
+                if (this.sideMode > 1) this.goHome()
                 return;
             case "HOME":
                 this.goHome()
                 return
             case "0":
-                if (this.mode != 1 && !this.editable) {
+                if (this.sideMode != 1 && !this.isEditable) {
                     let timer = setTimeout(() => {
                         document.getElementById("#searchEntity").focus();
                     }, 500);
-                    this.mode = 1
+                    this.sideMode = 1
                 }
                 return
             default:
         }
-        if (!this.isAdvanced && !this.editable) {
+        if (!this.isAdvanced && !this.isEditable) {
             if (Number.isNaN(e.key)) return
             let keyMap = [6, 7, 8, 3, 4, 5, 0, 1, 2]
             let menuId = keyMap[e.key - 1]
@@ -610,9 +703,11 @@ class FetchWrapper {
             });
         this.status = response.status;
         if (!response.ok) {
+            console.log(url);
             throw new Error("Network response was not ok");
         }
         return response.json();
+
     }
 
 
@@ -655,9 +750,18 @@ class FetchWrapper {
 }
 
 const fetchWrapper = new FetchWrapper(window.location);
+// This regex matches any progressive step of 'PRE', 'POST', or 'HH:MM'
+const allowedProgressiveInput = /^(?:P(?:R(?:E)?)?|P(?:O(?:S(?:T)?)?)?|(?:[01]\d?|2[0-3]?)(?::[0-5]?\d?)?)$/
 
-function attributeUse() {
+function AttributeUse() {
     this.nEntities = "..."
     this.perEntity = "..."
     this.latest = "..."
-} 
+}
+function CustomInput(initialLabel, initialPlaceholder = '') {
+    return {
+        label: initialLabel,
+        placeholder: initialPlaceholder,
+        text: '',
+    }
+}

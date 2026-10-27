@@ -3,271 +3,384 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Photon</title>
+    <title>Proton</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
     <link href='https://fonts.googleapis.com/css?family=Amaranth' rel='stylesheet'>
 
     <script type="module" src="./main.js"></script>
 </head>
 
-<body v-scope="app" @keydown="keydown">
+<body v-scope="app" @keydown="keydown" :style="{ '--line-height': lineHeight }">
+    <!-- outer view: full screen 96 characters wide, 24 lines high-->
+    <svg :view-box.camel="`0 0 ${96 * charWidth} ${24 * lineHeight}`"
+         class="main"
+         preserveAspectRatio="none"
+         :font-size="fontSize">
+        >
 
-    <!--The tools view  -->
-    <svg viewBox="0 0 160 480" class="nav" preserveAspectRatio="none" v-if="mode>0"
-         font-size="16.6666666">
-
-        <line x1="160" y1="0" x2="160" y2="480"></line>
-
-        <!--select entity  -->
-        <g v-show="mode==1">
-            <text class="caption" x="10" y="20">Select {{entityType.name}}</text>
-
-            <foreignObject x="10" y="30" width="180" height="30">
-                <input type="text" v-model="indexSearch" width="170" autocomplete="off"
-                       @keyup.self="indexSearchChanged" @input="indexSearchChanged"
-                       :placeholder="indexType.name" id="#searchEntity" />
+        <!--login view -->
+        <g v-if="sideMode==0">
+            <text :x="2 * charWidth" :y="2 * lineHeight + fontSize" class="caption">Proton password:</text>
+            <foreignObject :x="19 * charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="1 * lineHeight">
+                <input type="password" v-model="pwd" autocomplete="off" @keydown.enter="tryLogin" />
             </foreignObject>
-            <g v-for="(i, ix) in indexes">
-                <text  x="10" :y="ix*20 + 80" 
-                      v-bind:class="[(i.entityId == entityId) ? 'selected' : 'input']"
-                      @click="setEntity(i.entityId)">{{i.term}}</text>
-                <title>EntityId: {{i.entityId}}</title>
+            <g @click="tryLogin">
+                <rect :x="36 * charWidth" :y="1.9 * lineHeight" :width="10 * charWidth" :height="1.2 * lineHeight" class="button" fill="white" />
+                <text :x="38 * charWidth" :y="2 * lineHeight + fontSize" class="button">submit</text>
             </g>
-            <text class="caption clickable" @click="getIndexPreviousPage" x="10" y="470" v-show="indexesPage>0">&lt;BACK</text>
-            <text class="caption clickable" @click="getIndexNextPage" x="110" y="470" v-show="indexes?.length==19">NEXT&gt;</text>
-
+            <text class="caption" :x="2 * charWidth" :y="6 * lineHeight">{{loginMessage}}</text>
         </g>
 
-        <!--select view  -->
-        <g v-show="mode==2">
+        <g v-else>
+            <!--
+            The tools view  16 chracters, 24 lines -->
+            <svg :view-box.camel="`0 0 ${16 * charWidth} ${24 * lineHeight}`" preserveAspectRatio="none" v-if="sideMode>0"
+                 :font-size="fontSize" x="0" y="0" :height="24 * lineHeight" :width="16 * charWidth">
 
-            <text class="caption" x="10" y="20">Select view</text>
+                <line :x1="16 * charWidth" :y1="0" :x2="16 * charWidth" :y2="24 * lineHeight"></line>
 
-            <foreignObject x="10" y="30" width="180" height="30">
-                <input type="text" v-model="viewSearch" @keyup="getViews"
-                       @input.self="getViews" width="170" autocomplete="off" placeholder="enter text" />
-            </foreignObject>
-            <text v-for="(v, ix) in views.slice(viewStart, viewEnd)" class="input"
-                  x="10" :y="ix*20+80" v-bind:class="[(v == view) ? 'selected' : 'input']"
-                  @click="setView(v)">
-                {{v.name}}
-            </text>
-            <text class="caption clickable" @click="viewsPage--" x="10" y="470" v-show="viewsPage>0">&lt;BACK</text>
-            <text class="caption clickable" @click="viewsPage++" x="110" y="470" v-show="(viewEnd<views?.length)">NEXT&gt;</text>
-        </g>
+                <!--select entity  -->
+                <g v-show="sideMode==1">
+                    <text class="caption" :x="charWidth" :y="lineHeight">Select {{entityType.name}}</text>
 
-        <g v-show="mode==3">
-
-            <text class="caption" x="10" y="20">Select entity type</text>
-
-            <text v-for="(t, index) in entityTypes" class="input"
-                  x="10" :y="index*20 + 60" v-bind:class="[(t.id == entityType.id) ? 'selected' : 'input']"
-                  @click="setEntityType(t)">{{t.name}}</text>
-
-        </g>
-
-        <g v-show="mode==4">
-
-            <text class="caption" x="10" y="20">Select index type</text>
-
-            <text v-for="(t, ix) in entityType.indexTypes.slice(indexTypePage * 19 , indexTypePage * 19 + 19)"
-                  x="1" :y="ix*20 + 60" v-bind:class="[(t == indexType) ? 'selected' : 'input']"
-                  @click="setIndexType(t)">{{t.name}}</text>
-
-            <text class="caption clickable" @click="indexTypePage--" x="10" y="470" v-show="indexTypePage>0">&lt;BACK</text>
-            <text class="caption clickable" @click="indexTypePage++" x="110" y="470" v-show="(indexTypePage * 19 + 19 ) < entityType.indexTypes?.length">NEXT&gt;</text>
-
-        </g>
-
-        <!--attribute config view  -->
-        <g v-show="mode==5" font-size="12">
-            <g v-show="loadMessage">
-                <text>{{loadMessage}}</text>
-            </g>
-            <g v-else>
-                <text class="caption" x="2" y="20">View ID: {{view.id}}</text>
-                <text class="caption" x="2" y="35">Attribute: {{attributeConfig.id}}: {{attributeConfig.name}}</text>
-                <text class="caption" x="2" y="50">{{attributeConfig.comment}}</text>
-                <text class="caption" x="2" y="65">max: {{attributeConfig.max}} min: {{attributeConfig.min}}</text>
-                <text class="caption" x="2" y="80">{{entityType?.name}}s: {{attributeUse.nEntities}}</text>
-                <text class="caption" x="2" y="95">Per {{entityType?.name}}: {{attributeUse.perEntity}}</text>
-                <text class="caption" x="2" y="110">Most recent: {{attributeUse.latest}}</text>
-                <text class="caption" x="2" y="125">Type: {{attributeConfig.dataType}}</text>
-
-                <text class="caption" x="2" y="140" v-show="attributeConfig.quark">Quark: {{attributeConfig.quark}}</text>
-
-                <g v-show="attributeConfig.lookups?.length > 0">
-                    <text class="caption" x="2" y="140">Lookup type:</text>
-                    <g>
-                        <text class="caption" x="2" y="155">{{attributeConfig.lookupType}}</text>
-                        <title>LookupTypeId:{{attributeConfig.lookupTypeId}}</title>
+                    <foreignObject :x="charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="2 * charWidth">
+                        <input type="text" v-model="indexSearch" autocomplete="off"
+                               @keyup.self="indexSearchChanged" @input="indexSearchChanged"
+                               :placeholder="indexType.name" id="#searchEntity" />
+                    </foreignObject>
+                    <g v-for="(i, ix) in indexes">
+                        <text :x="charWidth" :y="(ix + 4) * lineHeight"
+                              v-bind:class="[(i.entityId == entityId) ? 'selected' : 'input']"
+                              @click="setEntity(i.entityId)">{{i.term}}</text>
+                        <title>EntityId: {{i.entityId}}</title>
                     </g>
-                    <g v-for="(l ,ix) in attributeConfig.lookups" >
-                        <text class="value" x="2" :y="170+ix*15">{{l.name}}</text>
-                        <title>{{l.id}}: {{l.name}}</title>
-                    </g>
-
-                    <text class="caption clickable" @click="previousLookups" x="10" y="470" v-show="lookupsPage>0">&lt;BACK</text>
-                    <text class="caption clickable" @click="nextLookups" x="110" y="470" v-show="attributeConfig.lookups?.length==20">NEXT&gt;</text>
+                    <text class="caption clickable" @click="getIndexPreviousPage" :x="charWidth" :y="23 * lineHeight" v-show="indexesPage>0">&lt;BACK</text>
+                    <text class="caption clickable" @click="getIndexNextPage" :x="11 * charWidth" :y="23 * lineHeight" v-show="indexes?.length==19">NEXT&gt;</text>
 
                 </g>
 
+                <!--select view  -->
+                <g v-show="sideMode==2">
 
-            </g>
-        </g>
-    </svg>
+                    <text class="caption" :x="charWidth" :y="lineHeight">Select view</text>
 
-    <!--The main view. reprersenting a 5:3 aspect rato. 80 caracters wide
-        24 lines of characters, double line spacing = 48 characters high
-        monospace font also has 5:3 aspect ratio (1.6666)
-        set font size 1.66666 so character width=1/80 screen width  
-        i.e. macthing DEC VT52-VT100 VDUs in 24 lines mode from c 1975 -->
-
-    <svg viewBox="0 0 80 48" class="main" preserveAspectRatio="none"
-         font-size="1.6666666" v-if="mode>0">
-        <line x1="0" y1="3" x2="80" y2="3"></line>
-        <line x1="0" y1="41" x2="80" y2="41"></line>
-        <line x1="40" y1="41" x2="40" y2="48"></line>
-        <line x1="0" y1="0" x2="0" y2="48"></line>
-        <g>
-            <!-- patient ID banner -->
-            <text class="value" v-for="v in idValues" :x="v.x" :y="(v.y-3)*2">{{v.text}}</text>
-            <title>EntityId: {{entityId}}</title>
-        </g>
-        <g v-show="!graphAttribute">
-            <!--Tabular area-->
-            <text class="caption" v-for="c in view.captions" :x="c.x" :y="c.y*2" v-html="viewCaption(c.text)"></text>
-            <g v-if="editable">
-                <g v-for="a in activeAttributes">
-                    <foreignObject v-for="v in a.values" class="text" :x="a.x" :width="a.displayLength" height="1.666"
-                                   :y="2*(a.y + v.seq - view.nRows * page -1) -1.666">
-                        <input type="text" class="text" v-model="v.text" />
-                    </foreignObject>     
-                </g>
-            </g>
-            <g v-else>
-                <g v-for="a in activeAttributes">
-                    <text class="value" :x="a.x"
-                          v-for="v in a.values"
-                          :y="2*(a.y + v.seq - view.nRows * page -1)">
-                        {{v.text}}
+                    <foreignObject :x="charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="lineHeight">
+                        <input type="text" v-model="viewSearch" @keyup="getViews"
+                               @input.self="getViews" autocomplete="off" placeholder="enter text" />
+                    </foreignObject>
+                    <text v-for="(v, ix) in views.slice(viewStart, viewEnd)"
+                          :x="charWidth" :y="(ix + 4) * lineHeight" :class="[(v == view) ? 'selected' : 'input']"
+                          @click="setView(v)">
+                        {{v.name}}
                     </text>
-
-                    <rect :height="(view.nRows) * 2 - 0.33333" :width="a.displayLength"
-                          :class="selectTargetClass(a)"
-                          :x="a.x" :y="(a.y)*2-1.33333 " @click="graph(a)">
-                        <title>{{selectTooltip(a)}}</title>
-                    </rect>
+                    <text class="caption clickable" @click="viewsPage--" :x="charWidth" :y="23 * lineHeight" v-show="viewsPage>0">&lt;BACK</text>
+                    <text class="caption clickable" @click="viewsPage++" :x="11 * charWidth" :y="23 * lineHeight" v-show="(viewEnd<views?.length)">NEXT&gt;</text>
                 </g>
 
-            </g>
+                <g v-show="sideMode==3">
 
+                    <text class="caption" :x="charWidth" :y="lineHeight">Select entity type</text>
 
-            <text v-show="nPages>1" class="value" x="26" y="43">{{page + 1}}/{{nPages}}</text>
-            <text class="caption" x="1" y="43">{{menu?.name}}</text>
-            <text :class="[i.isSelected? 'selected': 'input']" v-for="i in menu.menuItems"
-                  :y="Math.floor(i.seq / 3) * 2 + 43"
-                  :x="(i.seq % 3) * 13 + 41" @click="doMenuItem(i)">{{i.name}}</text>
-        </g>
-    <g v-show="graphAttribute">
-        <!-- graph area -->
-            <svg x="0" y="3" width="80" height="38"
-                 viewBox="0 0 80 34" preserveAspectRatio="none" class="outer">
-                <g v-show="graphData.plotPath.trim() != ''">
-                    <rect width="100%" height="100%" class="outer" />
-                    <!-- plot area -->
-                    <svg viewBox="0 0 65 30" x="10" y="0" height="30" width="65"
-                         class="plotArea" preserveAspectRatio="none">
-                        <rect width="100%" height="100%" class="plotArea" />
-                        <polyline :points="graphData.plotPath" />
-                        <!-- gridlines -->
-                        <line v-for="c in graphData.xCaptions1" y1="0" y2="34" :x1="c.x" :x2="c.x" class="grid"></line>
-                        <line v-for="c in graphData.yCaptions" :y1="c.y" :y2="c.y" x1="0" x2="70" class="grid"></line>
-                    </svg>
-                    <!-- Y scale -->
-                    <svg x="0" y="0" height="30" width="10" viewBox="0 0 10 30" class="axis" preserveAspectRatio="none">
-                        <text text-anchor="end" v-for="c in graphData.yCaptions" :y="c.y" x="9.8" class="axis">
-                            {{c.text}}
-                        </text>
-                    </svg>
-                    <!-- X scale -->
-                    <svg x="10" y="30" width="75" height="4" viewBox="0 0 75 4" class="axis" preserveAspectRatio="none">
-                        <line v-for="c in graphData.xCaptions2" y1="0" y2="4" :x1="c.x" :x2="c.x" class="grid"></line>
-                        <text v-for="c2 in graphData.xCaptions2" y="3.6" :x="c2.x" class="axis">
-                            {{c2.text}}
-                        </text>
-                        <text v-for="c1 in graphData.xCaptions1" y="1.6" :x="c1.x" class="axis">
-                            {{c1.text}}
-                        </text>
-                    </svg>
+                    <text v-for="(t, index) in entityTypes"
+                          :x="charWidth" :y="(index + 3) * lineHeight" v-bind:class="[(t.id == entityType.id) ? 'selected' : 'input']"
+                          @click="setEntityType(t)">{{t.name}}</text>
+
                 </g>
-                <g v-show="graphData.plotPath.trim() == ''">
-                    <text class="axis" x="37" y="20"> No data</text>
+
+                <g v-show="sideMode==4">
+
+                    <text class="caption" :x="charWidth" :y="lineHeight">Select index type</text>
+
+                    <text v-for="(t, ix) in entityType.indexTypes.slice(indexTypePage * 19 , indexTypePage * 19 + 19)"
+                          :x="charWidth" :y="(ix + 3) * lineHeight" v-bind:class="[(t == indexType) ? 'selected' : 'input']"
+                          @click="setIndexType(t)">{{t.name}}</text>
+
+                    <text class="caption clickable" @click="indexTypePage--" :x="charWidth" :y="23 * lineHeight" v-show="indexTypePage>0">&lt;BACK</text>
+                    <text class="caption clickable" @click="indexTypePage++" :x="11 * charWidth" :y="23 * lineHeight" v-show="(indexTypePage * 19 + 19 ) < entityType.indexTypes?.length">NEXT&gt;</text>
+
+                </g>
+
+                <!--attribute config view set scale to 75% to cram everything in -->
+                <g v-show="sideMode==5" :font-size="fontSize * 0.75">
+                    <g v-show="loadMessage">
+                        <text>{{loadMessage}}</text>
+                    </g>
+                    <g v-else>
+                        <text class="caption" x="0" :y="1 * lineHeight * 0.75">View ID: {{view.id}}</text>
+                        <text class="caption" x="0" :y="2 * lineHeight * 0.75">Attribute: {{attributeConfig.id}}: {{attributeConfig.name}}</text>
+                        <text class="caption" x="0" :y="3 * lineHeight * 0.75">{{attributeConfig.comment}}</text>
+                        <text class="caption" x="0" :y="4 * lineHeight * 0.75">max: {{attributeConfig.max}} min: {{attributeConfig.min}}</text>
+                        <text class="caption" x="0" :y="5 * lineHeight * 0.75">{{entityType?.name}}s: {{attributeUse.nEntities}}</text>
+                        <text class="caption" x="0" :y="6 * lineHeight * 0.75">Per {{entityType?.name}}: {{attributeUse.perEntity}}</text>
+                        <text class="caption" x="0" :y="7 * lineHeight * 0.75">Most recent: {{attributeUse.latest}}</text>
+                        <text class="caption" x="0" :y="8 * lineHeight * 0.75">Type: {{attributeConfig.dataType}}</text>
+
+                        <text class="caption" x="0" :y="9 * lineHeight * 0.75" v-show="attributeConfig.quark">Quark: {{attributeConfig.quark}}</text>
+
+                        <g v-show="attributeConfig.lookups?.length > 0">
+                            <text class="caption" x="0" :y="9 * lineHeight * 0.75">Lookup type:</text>
+                            <g>
+                                <text class="caption" x="0" :y="10 * lineHeight * 0.75">{{attributeConfig.lookupType}}</text>
+                                <title>LookupTypeId:{{attributeConfig.lookupTypeId}}</title>
+                            </g>
+                            <g v-for="(l ,ix) in attributeConfig.lookups">
+                                <text class="value" x="0" :y="(11 + ix) * lineHeight * 0.75">{{l.name}}</text>
+                                <title>{{l.id}}: {{l.name}}</title>
+                            </g>
+
+                            <text class="caption clickable" @click="previousLookups" :x="charWidth" :y="23 * lineHeight" v-show="lookupsPage>0">&lt;BACK</text>
+                            <text class="caption clickable" @click="nextLookups" :x="11 * charWidth" :y="23 * lineHeight" v-show="attributeConfig.lookups?.length==20">NEXT&gt;</text>
+
+                        </g>
+                    </g>
                 </g>
             </svg>
-            <text class="caption" x="41" y="43">Graphing {{graphAttribute?.name}}</text>
-            <text v-show="graphData.zoomFraction < 1" class="input" x="41" y="45" @click="graphZoom(1)">Zoom out</text>
-            <text v-show="graphData.zoomFraction > 0" class="input" x="54" y="45" @click="graphZoom(-1)">Zoom in</text>
-            <text class="input" x="67" y="47" @click="graphAttribute=null">Finished</text>
+
+            <!--The main view.
+            to mimic DEC VT-100
+            80 caracters wide, 24 lines of characters -->
+
+            <svg :view-box.camel="`0 0 ${81 * charWidth} ${24 * lineHeight}`" preserveAspectRatio="none"
+                 :font-size="fontSize" v-if="sideMode>0"
+                 :x="16 * charWidth" y="0" :height="24 * lineHeight" :width="80 * charWidth">
+                <line x1="0" :y1="1.5 * lineHeight" :x2="80 * charWidth" :y2="1.5 * lineHeight"></line>
+                <line x1="0" :y1="20.5 * lineHeight" :x2="80 * charWidth" :y2="20.5 * lineHeight"></line>
+                <line :x1="40 * charWidth" :y1="20.5 * lineHeight" :x2="40 * charWidth" :y2="24 * lineHeight"></line>
+                <line x1="0" y1="0" x2="0" :y2="24 * lineHeight"></line>
+                <g>
+                    <!-- patient ID banner -->
+                    <text class="value" v-for="v in idValues" :x="v.x * charWidth " :y="(v.y-3) * lineHeight">{{v.text}}</text>
+                    <title>EntityId: {{entityId}}</title>
+                </g>
+
+                <!--Tabular area-->
+                <g v-show="mainMode===1">
+                    <!--captions-->
+                    <text class="caption" v-for="c in view.captions"
+                          :x="c.x * charWidth" :y="(c.y) * lineHeight"
+                          v-html="viewCaption(c.text)">
+                    </text>
+
+                    <!--background for data values-->
+                    <g v-if="isConfig">
+                        <rect v-for="a in view.activeAttributes"
+                              class="bg-config"
+                              :x="a.x * charWidth" :y="(a.y - 1) * lineHeight"
+                              :width="a.displayLength * charWidth" :height="view.nRows  * lineHeight" />
+                    </g>
+
+                    <g v-else-if="isEditable">
+                        <g v-for="a in view.activeAttributes">
+                            <rect v-for="row in view.nRows" class="bg-edit"
+                                  :x="a.x * charWidth" :y="(a.y + row -1) * lineHeight - fontSize"
+                                  :width="a.displayLength * charWidth" :height="0.9 * lineHeight" />
+                        </g>
+                    </g>
+
+                    <!--The data values-->
+                    <g v-for="a in view.activeAttributes">
+                        <text v-for="v in a.values" class="value"
+                              :x="a.x * charWidth" :y="lineOrdinal(a,v.seq) * lineHeight">
+                            {{a.dataTypeId==4 ? getFormattedDate(v.text, a) : v.text.substring(0,a.displaylength)}}
+                        </text>
+                    </g>
+
+                    <!--transparent clickable areas-->
+                    <g v-if="isConfig">
+                        <rect v-for="a in view.activeAttributes" class="transparent clickable"
+                              :x="a.x * charWidth" :y="(a.y -1) * lineHeight"
+                              :width="a.displayLength * charWidth" :height="view.nRows * lineHeight"
+                              @click="showConfig(a)" />
+                    </g>
+                    <g v-else>
+                        <g v-for="a in view.activeAttributes">
+                            <rect v-for="v in a.values" class="transparent clickable"
+                                  :x="a.x * charWidth" :y="lineOrdinal(a, v.seq) * lineHeight - fontSize"
+                                  :width="a.displayLength * charWidth" :height="0.9 * lineHeight"
+                                  @click="valueClicked(a,v)" />
+                        </g>
+                    </g>
+
+
+                    <!--Controls for manual input-->
+                    <g v-if="editingValue != null">
+                        <foreignObject v-if="attribute.dataTypeId!=3"
+                                       :x="attribute.x * charWidth" :y="attribute.y * lineHeight"
+                                       :height="lineHeight" :width="attribute.displayLength * charWidth"
+                                       class="text">
+                            <input v-if="attribute.dataTypeId===4" type="date" class="text" v-model="editingValue.text" v-effect="$el.focus()" />
+                            <input v-else-if="attribute.dataTypeId===2" type="number" class="text" v-model="editingValue.text" v-effect="$el.focus()" />
+                            <input v-else-if="attribute.dataTypeId===7" type="text" class="text" v-model="editingValue.text" v-effect="$el.focus()"
+                                   @input="handleCompositeInput($event, editingValue.text)"
+                                   title="Enter a number, optionally starting with < or > (e.g., 42, <10, >5.5)" />
+                            <input v-else-if="attribute.dataTypeId===8" type="text" class="text"
+                                   v-effect="$el.focus()" :value="editingValue.text"
+                                   @input="handleCompositeTime"
+                                   title="Enter 'PRE', 'POST', or a valid 24-hour time like '14:30'" />
+                            <input v-else type="text" class="text" v-model="editingValue.text" v-effect="$el.focus()" />
+                        </foreignObject>
+                        <g v-else>
+                            <rect :x="attribute.x * charWidth" :y="attribute.y * lineHeight" :height="attribute.height * lineHeight"
+                                  :width="attribute.displayLength * charWidth"
+                                  class="plotArea">
+                            </rect>
+                            <foreignObject :x="attribute.x * charWidth" :y="attribute.y * lineHeight" :height="attribute.height * lineHeight"
+                                           :width="attribute.displayLength * charWidth">
+                                <input type="text" />
+                                <ul>
+                                    <li class="clickable" v-for="item in attribute.lookups"
+                                        @click="lookupClicked(item)"
+                                        :title="item.name">{{item.name.substring(0,attributeConfig.displayLength)}}</li>
+                                </ul>
+
+                            </foreignObject>
+                        </g>
+                    </g>
+
+                    <text v-show="nPages>1" class="value"
+                          :x="26 * charWidth" :y="21.5 * lineHeight">
+                        {{page + 1}}/{{nPages}}
+                    </text>
+
+                    <text class="caption"
+                          :x="charWidth" :y="21.5 * lineHeight">
+                        {{menu?.name}}
+                    </text>
+
+                    <text :class="[i.isSelected? 'selected': 'input']"
+                          v-for="i in menu.menuItems"
+                          :x="((i.seq % 3) * 13 + 41) * charWidth" :y="(Math.floor(i.seq / 3) + 21.5) * lineHeight"
+                          @click="doMenuItem(i)">
+                        {{i.name}}
+                    </text>
+                </g>
+                <g v-if="mainMode===3">
+                    <!--long text editor-->
+                    <foreignObject x="0" :y="1.5 * lineHeight" :width="80 * charWidth" :height="18 * lineHeight">
+                        <textarea v-model="longText"
+                                  style="width: 100%; height: 100%; box-sizing: border-box; resize: none; border: 2px solid #333; padding: 8px;">    
+                        </textarea>
+                    </foreignObject>
+                    <text class="caption" :x="41 * charWidth" :y="21.5 * lineHeight">Text editor {{longText.Attribute?.name}}</text>
+                    <text class="input" :x="41 * charWidth" :y="22.5 * lineHeight" @click="mainMode=1">Cancel</text>
+                    <text class="input" :x="54 * charWidth" :y="22.5 * lineHeight" @click="saveLongText">Save</text>
+
+                </g>
+                <!-- graph area -->
+                <g v-show="mainMode==2">
+                    <svg x="0" :y="1.5 * lineHeight" :width="80 * charWidth" :height="19 * lineHeight"
+                         viewBox="0 0 80 34" preserveAspectRatio="none" class="outer">
+                        <g v-show="graphData.plotPath.trim() != ''">
+                            <!-- plot area -->
+                            <svg viewBox="0 0 65 30" x="10" y="0" height="30" width="65"
+                                 class="plotArea" preserveAspectRatio="none">
+                                <rect width="100%" height="100%" class="plotArea" />
+                                <polyline :points="graphData.plotPath" />
+                                <!-- gridlines -->
+                                <line v-for="c in graphData.xCaptions1" y1="0" y2="34" :x1="c.x" :x2="c.x" class="grid"></line>
+                                <line v-for="c in graphData.yCaptions" :y1="c.y" :y2="c.y" x1="0" x2="70" class="grid"></line>
+                            </svg>
+                            <!-- Y scale -->
+                            <svg x="0" y="0" height="30" width="10" viewBox="0 0 10 30" class="axis" preserveAspectRatio="none">
+                                <text text-anchor="end" v-for="c in graphData.yCaptions" :y="c.y" x="9.8" class="axis">
+                                    {{c.text}}
+                                </text>
+                            </svg>
+                            <!-- X scale -->
+                            <svg x="10" y="30" width="75" height="4" viewBox="0 0 75 4" class="axis" preserveAspectRatio="none">
+                                <line v-for="c in graphData.xCaptions2" y1="0" y2="4" :x1="c.x" :x2="c.x" class="grid"></line>
+                                <text v-for="c2 in graphData.xCaptions2" y="3.6" :x="c2.x" class="axis">
+                                    {{c2.text}}
+                                </text>
+                                <text v-for="c1 in graphData.xCaptions1" y="1.6" :x="c1.x" class="axis">
+                                    {{c1.text}}
+                                </text>
+                            </svg>
+                        </g>
+                        <g v-show="graphData.plotPath.trim() == ''">
+                            <text class="axis" x="37" y="20"> No data</text>
+                        </g>
+                    </svg>
+                    <text class="caption" :x="41 * charWidth" :y="21.5 * lineHeight">Graphing {{attribute?.name}}</text>
+                    <text v-show="graphData.zoomFraction < 1" class="input" :x="41 * charWidth" :y="22.5 * lineHeight" @click="graphZoom(1)">Zoom out</text>
+                    <text v-show="graphData.zoomFraction > 0" class="input" :x="54 * charWidth" :y="22.5 * lineHeight" @click="graphZoom(-1)">Zoom in</text>
+                    <text class="input" :x="67 * charWidth" :y="23.5 * lineHeight" @click="mainMode=1">Finished</text>
+                </g>
+
+                <g v-if="isAdvanced">
+                    <text :class="[(sideMode==1)? 'selected': 'input']" :x="charWidth" :y="22.5 * lineHeight" @click="sideMode=1">Select by {{indexType.name}}</text>
+                    <text :class="[(sideMode==2)? 'selected': 'input']" :x="charWidth" :y="23.5 * lineHeight" @click="sideMode=2">View</text>
+                    <text :class="[(sideMode==3)? 'selected': 'input']" :x="17 * charWidth" :y="23.5 * lineHeight" @click="sideMode=3">Entity</text>
+                    <text :class="[(sideMode==4)? 'selected': 'input']" :x="33 * charWidth" :y="23.5 * lineHeight" @click="sideMode=4">Index</text>
+                    <g @click="isConfig=!isConfig" class="clickable">
+                        <svg viewBox="0 0 100 100" :x="17 * charWidth" :y="21 * lineHeight" :width="1.2 * charWidth" :height="0.6 * lineHeight">
+                            <rect x="0" y="0" height="100" width="100" fill="white" stroke="black" stroke-width="5" />
+                            <polyline v-show="isConfig" points="0,50 40,100 100,0"
+                                      style="fill:none;stroke:red;stroke-width:20" />
+                        </svg>
+                        <text :x="19 * charWidth" :y="21.5 * lineHeight" :class="[(isConfig)? 'selected': 'input']">Config</text>
+                    </g>
+                </g>
+                <text v-else class="input" :x="charWidth" :y="23.5 * lineHeight"
+                      @click="setAdvanced">Advanced</text>
+
+                <text class="input" :x="33 * charWidth" :y="21.5 * lineHeight"
+                      @click="logout">Logout</text>
+                <text :class="[!isAdvanced? 'caption clickable': 'input']"
+                      :x="33 * charWidth" :y="22.5 * lineHeight"
+                      @click="goHome">Home</text>
+            </svg>
         </g>
-        <g v-show="isAdvanced">
-            <text :class="[(mode==1)? 'selected': 'input']" x="1" y="45" @click="mode=1">Select by {{indexType.name}}</text>
-            <text :class="[(mode==2)? 'selected': 'input']" x="1" y="47" @click="mode=2">View</text>
-            <text :class="[(mode==3)? 'selected': 'input']" x="17" y="47" @click="mode=3">Entity</text>
-            <text :class="[(mode==4)? 'selected': 'input']" x="33" y="47" @click="mode=4">Index</text>
-            <g @click="isConfig=!isConfig" class="clickable">
-                <svg viewBox="0 0 100 100" x="17" y="41.9" width="1.2" height="1.2">
-
-                    <rect x="0" y="0" height="100" width="100" fill="white" stroke="black" stroke-width="5" />
-                    <polyline v-show="isConfig" points="0,50 40,100 100,0"
-                              style="fill:none;stroke:red;stroke-width:20" />
-                </svg>
-                <text x="19" y="43" :class="[(isConfig)? 'selected': 'input']">config</text>
-            </g>
-
-        </g>
-        <text class="input" x="33" y="43" @click="logout">Logout</text>
-        <text :class="[!isAdvanced? 'caption clickable': 'input']" x="33" y="45" @click="goHome">Home</text>
-
-
-
-        <text v-show="!isAdvanced" class="input" x="1" y="47" @click="setAdvanced">Advanced</text>
-
     </svg>
 
-    <!-- log in -->
-    <svg v-if="mode==0" viewBox="0 0 960 480" class="login" preserveAspectRatio="none"
-         font-size="17">
-        <text x="20" y="60" class="caption">Proton password:</text>
-        <foreignObject x="170" y="40" width="180" height="30">
-            <input type="password" v-model="pwd" width="170" autocomplete="off" @keydown.enter="tryLogin" />
-        </foreignObject>
-        <g @click="tryLogin">
-            <rect x="360" y="40" width="100" height="30" class="button" fill="white" />
-            <text x="380" y="60" class="button">submit</text>
-        </g>
-        <text class="caption" x="20" y="100">{{loginMessage}}</text>
-    </svg>
 
     <style>
-        foreignObject.text{
-            padding-inline-start:0;
-            border:0;
+        foreignObject.text {
+            padding-inline-start: 0;
+            border: 0;
             margin: 0 0 0 0;
             line-padding: 0;
-            height:1.666px;
-            vertical-align:central;
+            vertical-align: top;
         }
-        input.text {
+
+        input.text[type="text"],
+        input.text[type="number"] {
+            border: none;
+            border-width: 0;
+            font-size: 16.666px;
+            height: 100%;
+            width: 100%;
+            margin: 0 0 0 0;
+            padding-inline-start: 3.333px;
+            padding-inline-end: 0;
+            background-color: white;
+            color: black;
+            padding-bottom: 3px;
+            overflow: visible;
+        }
+
+        input.text[type="date"] {
+            border: none;
+            border-width: 0;
+            font-size: 16.666px;
+            height: 100%;
+            width: 100%;
+            margin: 0 0 0 0;
+            padding-inline-start: 0;
+            padding-inline-end: 0;
+        }
+
+        button {
             border: none;
             border-width: 0;
             font-size: 1.6666px;
             height: 100%;
-            width: 100%;
+            width: 20%;
             margin: 0 0 0 0;
-            padding-inline-start:0.333px;
-            padding-inline-end:0;
+            padding-inline-start: 0;
+            padding-inline-end: 0;
         }
+
         line.grid {
             stroke-width: 0.1px;
             stroke: grey;
@@ -288,19 +401,10 @@
             stroke: red;
         }
 
-        rect.outer {
-            fill: navy;
-        }
-
         rect.plotArea {
             fill: hsl(from navy h s calc(l + 10));
             stroke: white;
             stroke-width: 0.2px;
-        }
-        svg {
-            height: 100vh;
-            display: block;
-            font-family: Fira Code, monospace;
         }
 
         tspan {
@@ -309,27 +413,17 @@
             text-decoration: underline;
         }
 
-        svg.nav {
-            width: 20%;
-            float: left;
-            background-color: midnightblue;
-        }
-
         svg.main {
-            width: 80%;
-            float: right;
-            background-color: navy;
-        }
-
-        svg.login {
-            width: 100%;
-            float: right;
-            background-color: navy;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            font-family: Fira Code, monospace;
+            background-color: midnightblue;
         }
 
         line {
             stroke: grey;
-            stroke-width: 0.1px;
+            stroke-width: 1px;
         }
 
         text.value {
@@ -341,17 +435,22 @@
             cursor: pointer;
         }
 
-        rect.config {
-            opacity: 0.2;
-            fill: aqua;
-            cursor: pointer;
-        }
-
         rect.selected {
             opacity: 0.2;
             fill: red;
             cursor: pointer;
         }
+
+        rect.bg-edit {
+            opacity: 1;
+            fill: black;
+        }
+
+        rect.bg-config {
+            opacity: 1;
+            fill: slategrey;
+        }
+
 
         rect.hidden {
             opacity: 0;
@@ -402,6 +501,13 @@
             background-color: white;
         }
 
+        ul {
+            list-style-type: none;
+            padding: 0px;
+            margin: 0px;
+            color: white;
+            line-height: 24px;
+        }
     </style>
 
 </body>
