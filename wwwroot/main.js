@@ -297,7 +297,7 @@ const app = reactive({
     },
     graph(a) {
         if (this.entityId > 0 && (a.dataTypeId == 2 || a.dataTypeId == 7)) {
-
+            this.graphData.zoomFraction=1
             fetchWrapper
                 .get('DatedValues/' + this.entityId + ',' + a.attributeId)
                 .then((data) => {
