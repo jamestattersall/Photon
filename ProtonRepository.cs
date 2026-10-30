@@ -1,7 +1,9 @@
 ﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Data.Common;
 using System.Text;
+using System.Transactions;
 
 namespace Photon;
 
@@ -39,16 +41,16 @@ public class ProtonRepository
     public async Task<IEnumerable<ViewValue>> GetViewValues(int viewId, int entityId, int page = 0)
     {
         return await GetResultAsync<ViewValue>(
-            "SELECT attributeId, Seq, Value Text  FROM GetViewValues2(@viewId, @entityId, @page)",
+            "SELECT attributeId, Seq, Value Text  FROM GetViewValues(@viewId, @entityId, @page)",
             new { ViewId = viewId, EntityId = entityId, Page = page }
         );
     }
 
-    public async Task<IEnumerable<IdValue>> GetIdValues(int viewId, int entityId)
+    public async Task<IEnumerable<IdValue>> GetIdValues(int entityId)
     {
         return await GetResultAsync<IdValue>(
-            "SELECT Value text, x, y, dataTypeId, attributeId FROM GetViewValues(@viewId, @entityId, 0)",
-            new { ViewId = viewId, EntityId = entityId }
+            "SELECT Value text, x FROM GetEntityIdLine(@entityId)",
+            new {EntityId = entityId }
         );
     }
     public async Task<string> GetLongText(int entityId, int attributeId, int seq)
@@ -278,6 +280,51 @@ GROUP BY v.NRows",
         }
     }
 
+    public async Task<IResult> ProcessUpdates(BatchRequestDto request)
+    {
+        using var cn = new SqlConnection(_connectionString);
+
+        try
+        {
+            cn.Open();
+
+            await cn.ExecuteAsync(@" 
+            IF OBJECT_ID('BatchStaging') IS NOT NULL
+                DROP TABLE BatchStaging
+            ");
+
+            await cn.ExecuteAsync(@"
+            CREATE TABLE BatchStaging (
+                Action VARCHAR(10),
+                EntityId INT,
+                AttributeId smallint,
+                Seq INT,
+                Text VARCHAR(255)
+            );");
+
+            var stagingRecords = new List<object>();
+
+            stagingRecords.AddRange(request.Add.Select(c => new { Action = "CREATE", c.EntityId, c.AttributeId, c.Seq, c.Text }));
+            stagingRecords.AddRange(request.Update.Select(u => new { Action = "UPDATE", u.EntityId, u.AttributeId, u.Seq, u.Text }));
+            stagingRecords.AddRange(request.Delete.Select(id => new { Action = "DELETE", EntityId = id, AttributeId = 0, Seq = 0, Text = "" }));
+
+            // 4. Bulk insert the instructions into the temp table
+            const string insertStagingSql = @"
+            INSERT INTO BatchStaging (Action, EntityId, AttributeId, Seq, Text) 
+            VALUES (@Action, @EntityId, @AttributeId, @Seq, @Text);";
+
+            await cn.ExecuteAsync(insertStagingSql, stagingRecords);
+
+
+        }
+        catch (SqlException ex)
+        {
+            return Results.Problem(detail: ex.Message, statusCode: 500, title: "Database execution failed.");
+        }
+
+        return Results.Ok(new { message = "Batch processing completed successfully." });
+    }
+
     static string Decrypt(string input)
     {
         var chars = input.ToCharArray();
@@ -330,6 +377,11 @@ public class ViewValue
     public int Seq { get; set; }
     public required string Text { get; set; }
 }
+
+public record ValueDto(int EntityId, Int16 AttributeId, int Seq, string Text);
+
+public record BatchRequestDto(List<ValueDto> Add, List<ValueDto> Delete, List<ValueDto> Update);
+
 
 
 

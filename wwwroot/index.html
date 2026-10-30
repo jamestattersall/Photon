@@ -70,7 +70,7 @@
                     </foreignObject>
                     <text v-for="(v, ix) in views.slice(viewStart, viewEnd)"
                           :x="charWidth" :y="(ix + 4) * lineHeight" :class="[(v == view) ? 'selected' : 'input']"
-                          @click="setView(v)">
+                          @click="menuItems = []; setView(v)">
                         {{v.name}}
                     </text>
                     <text class="caption clickable" @click="viewsPage--" :x="charWidth" :y="23 * lineHeight" v-show="viewsPage>0">&lt;BACK</text>
@@ -149,7 +149,7 @@
                 <line x1="0" y1="0" x2="0" :y2="24 * lineHeight"></line>
                 <g>
                     <!-- patient ID banner -->
-                    <text class="value" v-for="v in idValues" :x="v.x * charWidth " :y="(v.y-3) * lineHeight">{{v.text}}</text>
+                    <text class="value" v-for="v in idValues" :x="v.x * charWidth " :y="lineHeight">{{v?.text}}</text>
                     <title>EntityId: {{entityId}}</title>
                 </g>
 
@@ -158,43 +158,43 @@
                     <!--captions-->
                     <text class="caption" v-for="c in view.captions"
                           :x="c.x * charWidth" :y="(c.y) * lineHeight"
-                          v-html="viewCaption(c.text)">
+                          v-html="viewCaption(c?.text)">
                     </text>
 
                     <!--background for data values-->
                     <g v-if="isConfig">
-                        <rect v-for="a in view.activeAttributes"
+                        <rect v-for="a in view.viewAttributes"
                               class="bg-config"
                               :x="a.x * charWidth" :y="(a.y - 1) * lineHeight"
                               :width="a.displayLength * charWidth" :height="view.nRows  * lineHeight" />
                     </g>
 
                     <g v-else-if="isEditable">
-                        <g v-for="a in view.activeAttributes">
-                            <rect v-for="row in view.nRows" class="bg-edit"
-                                  :x="a.x * charWidth" :y="(a.y + row -1) * lineHeight - fontSize"
+                        <g v-for="a in view.viewAttributes">
+                            <rect v-for="v in valuesMap[a.attributeId] || []" class="bg-edit"
+                                  :x="a.x * charWidth" :y="lineOrdinal(a,v.seq) * lineHeight - fontSize"
                                   :width="a.displayLength * charWidth" :height="0.9 * lineHeight" />
                         </g>
                     </g>
 
                     <!--The data values-->
-                    <g v-for="a in view.activeAttributes">
-                        <text v-for="v in a.values" class="value"
+                    <g v-for="a in view.viewAttributes">
+                        <text v-for="v in valuesMap[a.attributeId] || []" class="value"
                               :x="a.x * charWidth" :y="lineOrdinal(a,v.seq) * lineHeight">
-                            {{a.dataTypeId==4 ? getFormattedDate(v.text, a) : v.text.substring(0,a.displaylength)}}
+                            {{a.dataTypeId==4 ? getFormattedDate(v?.text, a) : v?.text?.substring(0,a.displaylength)}}
                         </text>
                     </g>
 
                     <!--transparent clickable areas-->
                     <g v-if="isConfig">
-                        <rect v-for="a in view.activeAttributes" class="transparent clickable"
+                        <rect v-for="a in view.viewAttributes" class="transparent clickable"
                               :x="a.x * charWidth" :y="(a.y -1) * lineHeight"
                               :width="a.displayLength * charWidth" :height="view.nRows * lineHeight"
                               @click="showConfig(a)" />
                     </g>
                     <g v-else>
-                        <g v-for="a in view.activeAttributes">
-                            <rect v-for="v in a.values" class="transparent clickable"
+                        <g v-for="a in view.viewAttributes">
+                            <rect v-for="v in valuesMap[a.attributeId] || []" class="transparent clickable"
                                   :x="a.x * charWidth" :y="lineOrdinal(a, v.seq) * lineHeight - fontSize"
                                   :width="a.displayLength * charWidth" :height="0.9 * lineHeight"
                                   @click="valueClicked(a,v)" />
@@ -203,7 +203,7 @@
 
 
                     <!--Controls for manual input-->
-                    <g v-if="editingValue != null">
+                    <g v-if="isEditable && editingValue">
                         <foreignObject v-if="attribute.dataTypeId!=3"
                                        :x="attribute.x * charWidth" :y="attribute.y * lineHeight"
                                        :height="lineHeight" :width="attribute.displayLength * charWidth"
@@ -221,16 +221,16 @@
                         </foreignObject>
                         <g v-else>
                             <rect :x="attribute.x * charWidth" :y="attribute.y * lineHeight" :height="attribute.height * lineHeight"
-                                  :width="attribute.displayLength * charWidth"
+                                  :width="(attribute.displayLength + 1) * charWidth"
                                   class="plotArea">
                             </rect>
                             <foreignObject :x="attribute.x * charWidth" :y="attribute.y * lineHeight" :height="attribute.height * lineHeight"
-                                           :width="attribute.displayLength * charWidth">
+                                           :width="(attribute.displayLength + 1) * charWidth">
                                 <input type="text" />
-                                <ul>
-                                    <li class="clickable" v-for="item in attribute.lookups"
+                                <ul :style="{ maxHeight: ((attribute.height ) * lineHeight) + 'px' }">
+                                    <li class="clickable" v-for="item in lookups"
                                         @click="lookupClicked(item)"
-                                        :title="item.name">{{item.name.substring(0,attributeConfig.displayLength)}}</li>
+                                        :title="item.name">{{item.name.substring(0,attribute.displayLength)}}</li>
                                 </ul>
 
                             </foreignObject>
@@ -507,6 +507,8 @@
             margin: 0px;
             color: white;
             line-height: 24px;
+            overflow-y: auto; /* 2. Add vertical scrollbar only when needed */
+            overflow-x: hidden; /* 3. Prevent accidental horizontal shifting */
         }
     </style>
 

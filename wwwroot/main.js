@@ -10,6 +10,7 @@ const app = reactive({
     view: {},
     views: [],
     attribute: {},
+    valuesMap: [],
     value: {},
     viewsPage: 0,
     viewSearch: '',
@@ -67,7 +68,7 @@ const app = reactive({
 
         if (a.dataTypeId == 3) {
             await vm.getLookups(a.attributeId, 0, 12)
-            let ll = this.lookups.length
+            let ll = this.lookups.length 
             let lo = vm.lineOrdinal(a, v.seq) - 1
             ac.height = (ll > 10) ? 10 : ll
             ac.y = lo
@@ -127,7 +128,11 @@ const app = reactive({
                     this.loginMessage = "Login succeeded. Loading..";
                     this.userStarter = data.userStarter
                     fetchWrapper.token = data.token
-                    console.log('token: ' + data.token)
+                    fetchWrapper.headers = {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + data.token
+                    }
                     this.getEntityTypes();
                     resetLoginTimer()
                 }
@@ -166,6 +171,8 @@ const app = reactive({
         e.target.value = raw;
     },
     handleCompositeTime(e) {
+        if (!this.editingValue) return
+
         const value = e.target.value;
         // 1. Regex for progressive matching (allows building 'PRE', 'POST', or 'hh:mm')
         // Supports typing 'P' -> 'PR' -> 'PRE', or '1' -> '12' -> '12:' -> '12:3' -> '12:34'
@@ -278,14 +285,12 @@ const app = reactive({
     },
     nextPage() {
         if (this.page < this.nPages - 1) {
-            this.view.activeAttributes.forEach(a => { a.values = []; })
             this.page++;
             this.getMainValues()
         }
     },
     previousPage() {
         if (this.page > 0) {
-            this.view.activeAttributes.forEach(a => { a.values = []; })
             this.page--;
             this.getMainValues()
         }
@@ -351,14 +356,14 @@ const app = reactive({
             const url = `ViewValues/${this.view.id},${this.entityId},${this.page}`;
 
             const vals = await fetchWrapper.get(url) || [];
-            //console.log(JSON.stringify(vals, null, 2));
-            const valuesMap = Map.groupBy(vals, v => v.attributeId);
 
-            for (let a of this.view.activeAttributes) {
-                a.values = valuesMap.get(a.attributeId) || [];
-            };
-            //console.log(JSON.stringify(this.view.activeAttributes, null, 2));
+            //petite-vue can't handle a Map, but this works.
+            //object with properties named by attributeId and consisting of the array of values for that attribute
+            //{"1234":[{attributeId: 1234, seq: 1, text: "hi"}, {attributeId:1234, seq: 2, text:"lo"}], "1235":[...], ... }
+            this.valuesMap = Object.groupBy(vals, v => v.attributeId);            
+            //get the array of values using bracket notation: this.valuesMap[attributeId]
 
+            console.log(JSON.stringify(this.valuesMap))
             this.isEditable = false;
 
         } catch (error) {
@@ -369,7 +374,7 @@ const app = reactive({
         fetchWrapper
             .get(`LongText/${this.entityId},${v.attributeId},${v.seq}`)
             .then(data => {
-                this.longText = data.text;
+                this.longText = data?.text;
             })
     },
     lineOrdinal(a, seq) {
@@ -377,7 +382,7 @@ const app = reactive({
     },
     async getIdValues() {
         fetchWrapper
-            .get('IdValues/' + this.entityType.idlineViewId + ',' + this.entityId)
+            .get('IdValues/' + this.entityId)
             .then((data) => this.idValues = data)
             .catch((error) => console.error(error));
     },
@@ -404,12 +409,8 @@ const app = reactive({
     setView(view) {
         this.view = view
         this.mainMode = 1;
-        this.view.activeAttributes = structuredClone(JSON.parse(JSON.stringify(this.view.viewAttributes)))
         this.page = 0
-        if (this.view.dateAttributeId > 0 && this.menu.menuItems?.length === 0) {
-            this.menu.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
-            this.menu.menuItems.push({ "name": "Down screen", "function": "3", "seq": 2, "nextMenuId": 0, "startMenuId": 0 })
-        }
+   
         if (this.entityId > 0) {
             this.getMainValues();
             this.getNPages();
@@ -418,51 +419,76 @@ const app = reactive({
     setEditable() {
         if (this.entityId === 0) { return; }
 
-        const dateAttr = this.view.activeAttributes.find(da => da.attributeId === this.view.dateAttributeId);
-        const rowCount = dateAttr?.values?.length || 1;
-        (this.view.activeAttributes || []).forEach(att => {
-            //  const valuesToGroup = att.values || [];
-            //   const mapVals = Map.groupBy(valuesToGroup, x => x.seq);
+
+        const dateAttr = this.view.dateAttributeId;
+        const dvs = this.valuesMap[dateAttr];
+        
+        (this.view.viewAttributes || []).forEach(att => {
+            let vals = this.valuesMap[att.attributeId]
+            if (!vals) {
+                this.valuesMap[att.attributeId] = [];
+                vals = this.valuesMap[att.attributeId]
+            }
             const startRow = (this.page) * this.view.nRows + 1;
-            let nRows = this.view.nRows;
-            if (rowCount < nRows) { nRows = rowCount; };
-            const endRow = startRow + nRows;
+            const endRow = startRow + dvs.length;
             for (let i = startRow; i < endRow; i++) {
-                if (att.values.find(v => v.seq === i) === undefined) {
-                    //att.values = att.values || [];
-                    att.values.push({ attributeId: att.attributeId, seq: i, text: null });
+                if (vals.find(v => v.seq === i) === undefined) {
+                    vals.push({ attributeId: att.attributeId, seq: i, text: null });
                 }
             }
         });
-        this.view.originalAttributes = structuredClone(JSON.parse(JSON.stringify(this.view.activeAttributes)));
 
         this.isEditable = true;
+
+        originalValuesMap = JSON.parse(JSON.stringify(this.valuesMap));
+
     },
 
     saveEdits() {
         if (!this.isEditable) return;
 
-        let editedValues = [];
+        const added = [];
+        const updated = [];
+        const removed = [];
+         
+        this.view.viewAttributes.forEach(a => {
+            const oldMap = new Map(originalValuesMap[a.attributeId].map(v => [v["seq"], v]));
+            const newMap = new Map(this.valuesMap[a.attributeId].map(v => [v["seq"], v]));
 
-        this.view.activeAttributes.forEach((aAtt, ix) => {
-            let oAtt = this.view.originalAttributes[ix];
-
-            aAtt.values.forEach(aVal => {
-                let oVal = oAtt.values.find(v => v.seq === aVal.seq);
-
-                if (oVal.text !== aVal.text) {
-                    editedValues.push({
-                        attributeId: aAtt.attributeId,
-                        seq: aVal.seq,
-                        originalText: oVal.text,
-                        newText: aVal.text
-                    });
+            // Check for additions and updates
+            for (const [id, newObj] of newMap.entries()) {
+                const oldObj = oldMap.get(id);
+                if (newObj?.text !== null && newObj.text !== "") {
+                    if (!oldObj.text || oldObj.text === "") {
+                        added.push(newObj);
+                    } else if (newObj.text !== oldObj.text) {
+                        updated.push({ old: oldObj, new: newObj });
+                    }
+                } else if (oldObj?.text && oldObj.text !== "") {
+                    removed.push(oldObj)
                 }
+            }
+
+            // Check for removals
+            for (const [id, oldObj] of oldMap.entries()) {
+                if (!newMap.has(id)) {
+                    removed.push(oldObj);
+                }
+            }
+        })
+        
+        this.isEditable = false
+       
+        console.log(JSON.stringify({ added, updated, removed }, null, '\t'))
+
+        fetchWrapper
+            .post('BatchUpdate', { Add: added, Update: updated, Delete: removed})
+            .then((response) => {
+                console.log("Batch update completed successfully.");
+            })
+            .catch((error) => {
+                console.error("Error occurred while processing batch update.", error);
             });
-        });
-        this.isEditable = false;
-        this.editingValue = null;
-        console.log(JSON.stringify(editedValues));
     },
 
 
@@ -599,7 +625,9 @@ const app = reactive({
             this.getViews()
             if (this.view.dateAttributeId > 0 && this.menu.menuItems.length === 0) {
                 this.menu.menuItems.push({ "name": "Up screen", "function": "2", "seq": 1, "nextMenuId": 0, "startMenuId": 0 })
-                this.menu.menuItems.push({ "name": "Down screen", "function": "3", "seq": 2, "nextMenuId": 0, "startMenuId": 0 })
+                this.menu.menuItems.push({ "name": "Down screen", "function": "3", "seq": 3, "nextMenuId": 0, "startMenuId": 0 })
+                this.menu.menuItems.push({ "name": "Change", "function": "5", "seq": 2, "nextMenuId": 0, "startMenuId": 0
+                })  
             }
         }
     },
@@ -686,7 +714,9 @@ function resetLoginTimer() {
 class FetchWrapper {
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
-        this.token = null;
+        this.headers = {
+            'Content-Type': 'application/json',
+        }
     }
 
     async get(url) {
@@ -695,11 +725,7 @@ class FetchWrapper {
         const response = await fetch(`${this.baseUrl}${url}`,
             {
                 method: 'get',
-                headers: {
-                    'Accept': 'application/json, text/plain, */*',
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + this.token,
-                }
+                headers: this.headers
             });
         this.status = response.status;
         if (!response.ok) {
@@ -710,28 +736,11 @@ class FetchWrapper {
 
     }
 
-
-    async put(url, data) {
-        const response = await fetch(`${this.baseUrl}${url}`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        if (!response.ok) {
-            console.log(response.status);
-        }
-        return response.json();
-    }
-
     async post(url, data) {
         const response = await fetch(`${this.baseUrl}${url}`, {
             method: 'POST',
             body: JSON.stringify(data),
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: this.headers
         });
         if (!response.ok) {
             console.log(response.status);
@@ -740,19 +749,13 @@ class FetchWrapper {
         resetLoginTimer()
         return response.json();
     }
-
-    async delete(url) {
-        const response = await fetch(`${this.baseUrl}${url}`, {
-            method: 'DELETE',
-        });
-        return response.json();
-    }
 }
 
 const fetchWrapper = new FetchWrapper(window.location);
 // This regex matches any progressive step of 'PRE', 'POST', or 'HH:MM'
 const allowedProgressiveInput = /^(?:P(?:R(?:E)?)?|P(?:O(?:S(?:T)?)?)?|(?:[01]\d?|2[0-3]?)(?::[0-5]?\d?)?)$/
 
+var originalValuesMap = {}
 function AttributeUse() {
     this.nEntities = "..."
     this.perEntity = "..."

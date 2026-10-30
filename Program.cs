@@ -40,8 +40,10 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseHttpsRedirection();
+
+app.UseFileServer();
+
 
 if (app.Environment.IsDevelopment())
 {
@@ -49,9 +51,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-
-app.UseFileServer();
 
 if (app.Environment.IsDevelopment())
 {
@@ -73,6 +72,10 @@ else
 app.UseDefaultFiles("/index.html");
 
 app.UseDeveloperExceptionPage();
+
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Fix for CS8604: Ensure connectionString is not null before using it
 var connectionString = builder.Configuration.GetConnectionString("default");
@@ -98,8 +101,8 @@ app.MapGet("/AttributeUse/{attributeId}", async (int attributeId) =>
 app.MapGet("/ViewValues/{viewId},{entityid},{page}", async (int viewId, int entityId, int page = 0) =>
     await repository.GetViewValues(viewId, entityId, page)).RequireAuthorization();
 
-app.MapGet("/IdValues/{viewId},{entityid}", async (int viewId, int entityId) =>
-    await repository.GetIdValues(viewId, entityId)).RequireAuthorization();
+app.MapGet("/IdValues/{entityid}", async (int entityId) =>
+    await repository.GetIdValues(entityId)).RequireAuthorization();
 
 app.MapGet("/LongText/{entityId},{attributeId},{seq}", async (int entityId, int attributeId, int seq) =>
 {
@@ -155,8 +158,19 @@ app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authe
 
     logger.LogWarning("Windows Login failed");
     return Results.BadRequest(new { message = "User must be logged in to Windows." });
-})
-.RequireAuthorization();
+}).RequireAuthorization();
 
+app.MapPost("/BatchUpdate", async (Photon.BatchRequestDto request) =>
+{
+    try
+    {
+        var result = await repository.ProcessUpdates(request);
+        return result;
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(detail: ex.Message, statusCode: 500, title: "An error occurred while processing the batch.");
+    }
+}).RequireAuthorization();
 
 app.Run();
