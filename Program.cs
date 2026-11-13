@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 using Photon.Jwt;
 using Photon.Models;
-
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +37,9 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.Host.UseSerilog((context, configuration) =>
+    configuration.ReadFrom.Configuration(context.Configuration));
+
 
 var app = builder.Build();
 
@@ -52,6 +55,7 @@ if (app.Environment.IsDevelopment())
 }
 
 
+app.UseDefaultFiles();
 if (app.Environment.IsDevelopment())
 {
     app.UseStaticFiles(new StaticFileOptions
@@ -69,13 +73,13 @@ else
     app.UseStaticFiles();
 }
 
-app.UseDefaultFiles("/index.html");
 
 app.UseDeveloperExceptionPage();
 
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 
 // Fix for CS8604: Ensure connectionString is not null before using it
 var connectionString = builder.Configuration.GetConnectionString("default");
@@ -136,27 +140,31 @@ app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authe
     if (context.User.Identity != null && context.User.Identity.IsAuthenticated)
     {
         var userName = context.User.Identity.Name;
-        var userStarter = await repository.TryLogin(request.Password);
-
-        if (userStarter == null)
+        try
         {
-            return Results.BadRequest(new { message = "Password does not match any in Proton." });
+            var userStarter = await repository.TryLogin(request.Password);
+            if (userStarter == null)
+            {
+                Log.Warning("User {UserName} did not authenticate.", userName);
+                return Results.BadRequest(new { message = "Password does not match any in Proton." });
+            }  // Generate JWT token
+            var token = identityService.GenerateToken(userName!);
+            Log.Information("User {UserName} logged in successfully.", userName);
+            return Results.Ok(new LoginResponse
+            {
+                Message = "Login successful",
+                Token = token,
+                UserStarter = userStarter,
+                Username = userName
+            });
         }
-        //userStarter.Menu = await repository.GetMenu(userStarter.MenuId);
-
-        // Generate JWT token
-        var token = identityService.GenerateToken(userName!);
-
-        return Results.Ok(new LoginResponse
-        {
-            Message = "Login successful",
-            Token = token,
-            UserStarter = userStarter,
-            Username = userName
-        });
+        catch(Exception ex){
+            Log.Error(ex, "Error during login attempt.");
+            return Results.Problem(detail: ex.Message, statusCode: 500, title: "An error occurred during login.");
+        };      
     }
 
-    logger.LogWarning("Windows Login failed");
+    Log.Warning("Windows Login failed");
     return Results.BadRequest(new { message = "User must be logged in to Windows." });
 }).RequireAuthorization();
 

@@ -722,7 +722,8 @@ class FetchWrapper {
     async get(url) {
         if (this.token == null) return;
         resetLoginTimer()
-        const response = await fetch(`${this.baseUrl}${url}`,
+        //const response = await fetch(`${this.baseUrl}${url}`,
+        const response = await fetch(url,
             {
                 method: 'get',
                 headers: this.headers
