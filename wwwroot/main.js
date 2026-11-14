@@ -1,6 +1,8 @@
 ﻿import { createApp, reactive } from './petite-vue.js?module' // 'https://unpkg.com/petite-vue?module'
 import { graphics } from './graphics.js'
 
+
+
 const app = reactive({
     charWidth: 12, // number of arbitary screen units in one monotype character width
     fontSize: 20,  // a.k.a font height = charWidth * 5/3 for monotype font
@@ -25,7 +27,7 @@ const app = reactive({
     page: 0,
     nPages: 0,
     userStarter: { id: 1, functionId: 1, priv: 255, parameter: 50, entityTypeId: 1, idLineViewId: 128, indexTypeId: 1 },
-    pwd: 'UFCCL',
+    pPwd: 'UFCCL',
     loginMessage: "",
     loadMessage: "",
     menu: { id: 0, name: "", menuItems: [] },
@@ -40,6 +42,8 @@ const app = reactive({
     lookupsPage: 0,
     graphData: graphics,
     longText: '',
+    userName: '',
+    nPwd: '',
     valueClicked(a, v) {
         if (this.isEditable) {
             this.edit(a, v)
@@ -109,10 +113,10 @@ const app = reactive({
         this.userStarter = null;
         this.menuHistory = [];
         this.sideMode = 0;
-        this.pwd = "";
+        this.nPwd = "";
     },
     tryLogin() {
-        let pwd = this.pwd
+        let pwd = this.pPwd
         if (pwd.length == 0) {
             this.authenticated = false;
             this.loginMessage = "You must enter a password";
@@ -120,12 +124,14 @@ const app = reactive({
         }
         this.loginMessage = 'Checking password..'
         fetchWrapper
-            .post('login', { password: this.pwd })
+            .post('login', { pPwd: pwd, nPwd: this.nPwd, userName: this.userName })
             .then((data) => {
                 if (data == null) {
                     this.loginMessage = 'Invalid password'
+                } else if (!data.isAuthenticated) {
+                    this.loginMessage = data.message;
                 } else {
-                    this.loginMessage = "Login succeeded. Loading..";
+                    this.loginMessage = data.message;
                     this.userStarter = data.userStarter
                     fetchWrapper.token = data.token
                     fetchWrapper.headers = {
@@ -140,9 +146,18 @@ const app = reactive({
             .catch((error) => console.error(error));
 
     },
-    //init() {
-    //  this.tryLogin();
-    //},
+    async init() {
+        
+        const response = await fetch('/user', {
+            method: 'GET'
+        });
+        if (response.ok) {
+            this.userName = await response.text();
+            alert(this.userName)
+        } else {
+            console.error('Failed to fetch user:', response.status);
+        }
+    },
     getFormattedDate(date, a) {
         //console.log(JSON.stringify(date));
         date = date ?? '';
@@ -695,6 +710,7 @@ const app = reactive({
 
 })
 
+
 createApp({ app }).mount()
 
 var indexTimer
@@ -722,8 +738,7 @@ class FetchWrapper {
     async get(url) {
         if (this.token == null) return;
         resetLoginTimer()
-        //const response = await fetch(`${this.baseUrl}${url}`,
-        const response = await fetch(url,
+        const response = await fetch(`${this.baseUrl}${url}`,
             {
                 method: 'get',
                 headers: this.headers
@@ -751,8 +766,9 @@ class FetchWrapper {
         return response.json();
     }
 }
+const BASE_URL = new URL('.', window.location.href).href;
 
-const fetchWrapper = new FetchWrapper(window.location);
+const fetchWrapper = new FetchWrapper(BASE_URL);
 // This regex matches any progressive step of 'PRE', 'POST', or 'HH:MM'
 const allowedProgressiveInput = /^(?:P(?:R(?:E)?)?|P(?:O(?:S(?:T)?)?)?|(?:[01]\d?|2[0-3]?)(?::[0-5]?\d?)?)$/
 
@@ -769,3 +785,5 @@ function CustomInput(initialLabel, initialPlaceholder = '') {
         text: '',
     }
 }
+
+

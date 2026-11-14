@@ -1,4 +1,6 @@
 ﻿public record LoginRequest
 {
-    public string Password { get; set; } = string.Empty;
+    public string userName { get; set; }
+    public string nPwd { get; set; }
+    public string pPwd { get; set; } = string.Empty;
 }

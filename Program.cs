@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.OpenApi;
 using Photon.Jwt;
 using Photon.Models;
 using Serilog;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -129,44 +131,58 @@ app.MapGet("/NPages/{viewId},{entityId}", (short viewId, int entityId) =>
 app.MapGet("/Menu/{Id}", (short id) =>
     repository.GetMenu(id)).RequireAuthorization();
 
-app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (LoginRequest request, IdentityService identityService, IConfiguration config, ILogger<Program> logger, HttpContext context) =>
+app.MapGet("/user", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (HttpContext context) =>
 {
+    var usr = context.User;
+    return usr.Identity.Name;
+})
+.RequireAuthorization();
+
+app.MapPost("/login", async (LoginRequest request, IdentityService identityService, HttpContext context) =>
+{
+    var resp = new LoginResponse();
     // Validate user credentials
-    if (string.IsNullOrWhiteSpace(request.Password))
+    if (string.IsNullOrWhiteSpace(request.userName) || string.IsNullOrWhiteSpace(request.nPwd))
     {
-        logger.LogWarning("Login failed: Empty password.");
-        return Results.BadRequest(new { message = "password is required." });
-    }
-    if (context.User.Identity != null && context.User.Identity.IsAuthenticated)
-    {
-        var userName = context.User.Identity.Name;
-        try
-        {
-            var userStarter = await repository.TryLogin(request.Password);
-            if (userStarter == null)
-            {
-                Log.Warning("User {UserName} did not authenticate.", userName);
-                return Results.BadRequest(new { message = "Password does not match any in Proton." });
-            }  // Generate JWT token
-            var token = identityService.GenerateToken(userName!);
-            Log.Information("User {UserName} logged in successfully.", userName);
-            return Results.Ok(new LoginResponse
-            {
-                Message = "Login successful",
-                Token = token,
-                UserStarter = userStarter,
-                Username = userName
-            });
-        }
-        catch(Exception ex){
-            Log.Error(ex, "Error during login attempt.");
-            return Results.Problem(detail: ex.Message, statusCode: 500, title: "An error occurred during login.");
-        };      
+        resp.Message = "Network user name and password are required.";
+        resp.IsAuthenticated = false;
+        return Results.BadRequest(resp);
     }
 
-    Log.Warning("Windows Login failed");
-    return Results.BadRequest(new { message = "User must be logged in to Windows." });
-}).RequireAuthorization();
+
+    var authResult = WindowsAuthHelper.Authenticate(request.userName, request.nPwd);
+    if (!authResult.IsAuthenticated || string.IsNullOrEmpty(authResult.ResolvedUser))
+    {
+        resp.IsAuthenticated = false;
+        resp.Message = "Invalid network credentials. Code:" + authResult.ErrorCode.ToString();
+        return Results.Ok(resp);
+    }
+
+    try
+    {
+        var userStarter = await repository.TryLogin(request.pPwd);
+        if (userStarter == null)
+        {
+            resp.IsAuthenticated = false;
+            resp.Message = "Password does not match any in Proton.";
+            return Results.Ok(resp);
+        }  // Generate JWT token
+        var token = identityService.GenerateToken(request.userName!);
+        Log.Information("User {UserName} logged in successfully.", request.userName);
+        resp.Message = "Login successful";
+        resp.IsAuthenticated = true;
+        resp.UserStarter = userStarter;
+        resp.Token = token;
+        return Results.Ok(resp);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error during login attempt.");
+        resp.Message = "An error occurred during login: " + ex.Message;
+        resp.IsAuthenticated = false;
+        return Results.Ok(resp);
+    }
+});
 
 app.MapPost("/BatchUpdate", async (Photon.BatchRequestDto request) =>
 {

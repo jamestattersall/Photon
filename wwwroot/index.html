@@ -10,7 +10,7 @@
     <script type="module" src="./main.js"></script>
 </head>
 
-<body v-scope="app" @keydown="keydown" :style="{ '--line-height': lineHeight }">
+<body v-scope="app" @vue:mounted="init()"  @keydown="keydown" :style="{ '--line-height': lineHeight }">
     <!-- outer view: full screen 96 characters wide, 24 lines high-->
     <svg :view-box.camel="`0 0 ${96 * charWidth} ${24 * lineHeight}`"
          class="main"
@@ -20,15 +20,23 @@
 
         <!--login view -->
         <g v-if="sideMode==0">
-            <text :x="2 * charWidth" :y="2 * lineHeight + fontSize" class="caption">Proton password:</text>
+            <text :x="2 * charWidth" :y="2 * lineHeight + fontSize" class="caption">Network username:</text>
             <foreignObject :x="19 * charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="1 * lineHeight">
-                <input type="password" v-model="pwd" autocomplete="off" @keydown.enter="tryLogin" />
+                <input type="text" class="text" v-model="userName"  />
+            </foreignObject>
+            <text :x="2 * charWidth" :y="4 * lineHeight + fontSize" class="caption">Network password:</text>
+            <foreignObject :x="19 * charWidth" :y="4 * lineHeight" :width="18 * charWidth" :height="1 * lineHeight">
+                <input type="text" v-model="nPwd" autocomplete="off" class="masked-secret text"  />
+            </foreignObject>
+            <text :x="2 * charWidth" :y="6 * lineHeight + fontSize" class="caption">Proton password:</text>
+            <foreignObject :x="19 * charWidth" :y="6 * lineHeight" :width="18 * charWidth" :height="1 * lineHeight">
+                <input type="text" v-model="pPwd" autocomplete="off" class="masked-secret text" />
             </foreignObject>
             <g @click="tryLogin">
-                <rect :x="36 * charWidth" :y="1.9 * lineHeight" :width="10 * charWidth" :height="1.2 * lineHeight" class="button" fill="white" />
-                <text :x="38 * charWidth" :y="2 * lineHeight + fontSize" class="button">submit</text>
+                <rect :x="2 * charWidth" :y="7.9 * lineHeight" :width="10 * charWidth" :height="1.2 * lineHeight" class="button" fill="white" />
+                <text :x="4 * charWidth" :y="8 * lineHeight + fontSize" class="button">submit</text>
             </g>
-            <text class="caption" :x="2 * charWidth" :y="6 * lineHeight">{{loginMessage}}</text>
+            <text class="caption" :x="2 * charWidth" :y="10 * lineHeight">{{loginMessage}}</text>
         </g>
 
         <g v-else>
@@ -44,7 +52,7 @@
                     <text class="caption" :x="charWidth" :y="lineHeight">Select {{entityType.name}}</text>
 
                     <foreignObject :x="charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="2 * charWidth">
-                        <input type="text" v-model="indexSearch" autocomplete="off"
+                        <input class="text" type="text" v-model="indexSearch" autocomplete="off"
                                @keyup.self="indexSearchChanged" @input="indexSearchChanged"
                                :placeholder="indexType.name" id="#searchEntity" />
                     </foreignObject>
@@ -65,7 +73,7 @@
                     <text class="caption" :x="charWidth" :y="lineHeight">Select view</text>
 
                     <foreignObject :x="charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="lineHeight">
-                        <input type="text" v-model="viewSearch" @keyup="getViews"
+                        <input class="text" type="text" v-model="viewSearch" @keyup="getViews"
                                @input.self="getViews" autocomplete="off" placeholder="enter text" />
                     </foreignObject>
                     <text v-for="(v, ix) in views.slice(viewStart, viewEnd)"
@@ -342,7 +350,9 @@
             line-padding: 0;
             vertical-align: top;
         }
-
+        .masked-secret {
+            -webkit-text-security: disc;
+        }
         input.text[type="text"],
         input.text[type="number"] {
             border: none;
