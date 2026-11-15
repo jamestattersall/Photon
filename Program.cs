@@ -1,8 +1,7 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.OpenApi;
-using Photon.Jwt;
 using Photon.Models;
 using Serilog;
 using System.Security.Claims;
@@ -13,31 +12,42 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 
-
-var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfiguration>() ?? throw new InvalidOperationException("Jwt configuration is missing or invalid.");
-
-builder.Services.AddSingleton(jwtConfig);
-
-builder.Services.AddScoped<IdentityService>();
-builder.Services.AddJwtAuthentication(jwtConfig);
-
 builder.Services.AddSwaggerGen(options =>
 {
-    // ...
-
-    options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
+    options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        Description = "JWT Authorization header using the Bearer scheme."
-    });
-
-    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-    {
-        [new OpenApiSecuritySchemeReference("bearer", document)] = []
+        Title = "Windows & Microsoft Account Auth API",
+        Version = "v1",
+        Description = "Use POST /login first to set the WinAuthSession cookie, then test protected endpoints."
     });
 });
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "WinAuthSession";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+
+        // Automatically expire the server-side cookie after 5 minutes of API inactivity
+        options.ExpireTimeSpan = TimeSpan.FromHours(1);
+        options.SlidingExpiration = true;
+
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate();
 
 builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
@@ -53,7 +63,13 @@ app.UseFileServer();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Windows Auth API v1");
+
+        // Crucial: Ensure Swagger UI's fetch client includes HTTP-only cookies on every request
+        options.UseRequestInterceptor("(req) => { req.credentials = 'include'; return req; }");
+    });
 }
 
 
@@ -135,10 +151,9 @@ app.MapGet("/user", [Authorize(AuthenticationSchemes = NegotiateDefaults.Authent
 {
     var usr = context.User;
     return usr.Identity.Name;
-})
-.RequireAuthorization();
+});
 
-app.MapPost("/login", async (LoginRequest request, IdentityService identityService, HttpContext context) =>
+app.MapPost("/login", async (LoginRequest request, HttpContext context) =>
 {
     var resp = new LoginResponse();
     // Validate user credentials
@@ -166,13 +181,11 @@ app.MapPost("/login", async (LoginRequest request, IdentityService identityServi
             resp.IsAuthenticated = false;
             resp.Message = "Password does not match any in Proton.";
             return Results.Ok(resp);
-        }  // Generate JWT token
-        var token = identityService.GenerateToken(request.userName!);
+        }  
         Log.Information("User {UserName} logged in successfully.", request.userName);
         resp.Message = "Login successful";
         resp.IsAuthenticated = true;
         resp.UserStarter = userStarter;
-        resp.Token = token;
         return Results.Ok(resp);
     }
     catch (Exception ex)

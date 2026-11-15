@@ -133,12 +133,7 @@ const app = reactive({
                 } else {
                     this.loginMessage = data.message;
                     this.userStarter = data.userStarter
-                    fetchWrapper.token = data.token
-                    fetchWrapper.headers = {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + data.token
-                    }
+                    
                     this.getEntityTypes();
                     resetLoginTimer()
                 }
@@ -148,12 +143,11 @@ const app = reactive({
     },
     async init() {
         
-        const response = await fetch('/user', {
+        const response = await fetch(BASE_URL + 'user', {
             method: 'GET'
         });
         if (response.ok) {
             this.userName = await response.text();
-            alert(this.userName)
         } else {
             console.error('Failed to fetch user:', response.status);
         }
@@ -730,18 +724,17 @@ function resetLoginTimer() {
 class FetchWrapper {
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
-        this.headers = {
-            'Content-Type': 'application/json',
-        }
     }
 
     async get(url) {
-        if (this.token == null) return;
         resetLoginTimer()
         const response = await fetch(`${this.baseUrl}${url}`,
             {
-                method: 'get',
-                headers: this.headers
+                method: 'GET',
+                credentials: 'include', // Required to send cookies and Windows/Negotiate auth
+                headers: {
+                    'Accept': 'application/json'
+                }
             });
         this.status = response.status;
         if (!response.ok) {
@@ -756,7 +749,8 @@ class FetchWrapper {
         const response = await fetch(`${this.baseUrl}${url}`, {
             method: 'POST',
             body: JSON.stringify(data),
-            headers: this.headers
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            credentials: 'same-origin'
         });
         if (!response.ok) {
             console.log(response.status);
