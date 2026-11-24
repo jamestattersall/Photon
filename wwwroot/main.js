@@ -699,13 +699,24 @@ const app = reactive({
             }
         }
     },
+    // Caption markup for v-html: the caption text is HTML-escaped, and matches of the view
+    // search are wrapped in <tspan> to highlight them. The search is matched literally,
+    // so characters such as ( [ . * are not treated as regular-expression syntax.
     viewCaption(text) {
-        if (this.viewSearch?.length > 0) {
-            let reg = new RegExp(`${this.viewSearch}`, 'gi');
+        text = text ?? ''
+        const escapeHtml = s => s.replace(/[&<>"']/g,
+            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
-            return text.replace(reg, "<tspan>$&</tspan>")
+        if (!(this.viewSearch?.length > 0)) return escapeHtml(text)
+
+        const reg = new RegExp(this.viewSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+        let html = ''
+        let last = 0
+        for (const m of text.matchAll(reg)) {
+            html += escapeHtml(text.slice(last, m.index)) + '<tspan>' + escapeHtml(m[0]) + '</tspan>'
+            last = m.index + m[0].length
         }
-        return text
+        return html + escapeHtml(text.slice(last))
     }
 
 })
