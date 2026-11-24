@@ -450,10 +450,16 @@ namespace ProtonImport.ProtonToSql
 
 
         /// <summary>
+        /// Rows per table per batch. Large batches keep the number of SQL round trips and
+        /// staging syncs low; memory is roughly two batches per value table.
+        /// </summary>
+        public const int DefaultBatchRows = 50_000;
+
+        /// <summary>
         /// Full import/update pipeline: values, then indexes, entities and entity names.
         /// Used by both the scheduled (no-argument) run and the settings menu.
         /// </summary>
-        public static void ImportAll(int nRows)
+        public static void ImportAll(int nRows = DefaultBatchRows)
         {
             using ValuesLoader dsl = new();
             dsl.LoadValues(nRows);
@@ -499,6 +505,9 @@ namespace ProtonImport.ProtonToSql
             long nEntities = 0;
             var prog = new Utilities.Progress(20);
 
+            // the batch each table is currently writing to SQL in the background (one per table)
+            Task[] pending = [.. tableUtilities.Select(_ => Task.CompletedTask)];
+
             Action<int> loadFunction = noLoad ? Noload : Process;
 
             if (Utilities.ConfigurationManager.AppSettings.OnlyTheseEntities.Count == 0)
@@ -525,37 +534,24 @@ namespace ProtonImport.ProtonToSql
 
             if (!noLoad)
             {
-                List<Task> tasks = [];
-
-                foreach (IValueTableUtilities u in tableUtilities)
+                // wait for batches still being written, then send what remains in every table
+                Task.WaitAll(pending);
+                for (int t = 0; t < tableUtilities.Length; t++)
                 {
-                    //save to SQL any remaining rows in writing table not yet saved
-                    //run simultaneously
-                    tasks.Add(Task.Run(() =>
-                    {
-                        //send to SQL db
-                        u.BulkLoad();
-                        u.SyncFromStaging();
-                    }));
-                }
-
-                Task.WaitAll(tasks);
-                tasks.Clear();
-
-                foreach (IValueTableUtilities u in tableUtilities)
-                {
-                    //switch to the reading table, populated from data from Proton .dbs at the ultimate iteration
+                    var u = tableUtilities[t];
                     u.SwitchTables();
-                    tasks.Add(Task.Run(() =>
+                    pending[t] = Task.Run(() =>
                     {
-                        //save to SQL any remaining rows in table not yet saved
-                        //run simultaneously
                         u.BulkLoad();
                         u.SyncFromStaging();
-                    }));
+                    });
                 }
+                Task.WaitAll(pending);
 
-                Task.WaitAll(tasks);
+                foreach (IValueTableUtilities u in tableUtilities)
+                {
+                    u.DropStaging();
+                }
             }
 
             prog.WriteProgressBar(1);
@@ -594,48 +590,24 @@ namespace ProtonImport.ProtonToSql
             {
                 counter++;
 
-                List<Task> tasks = [];
-                List<IValueTableUtilities> toSwitchTables = [];
-                //tasks in list to run sumultaneously
-                foreach (IValueTableUtilities u in tableUtilities)
+                for (int t = 0; t < tableUtilities.Length; t++)
                 {
-                    //DataTables already populated from previous load from Proton .dbs files
-                    if (u.DataRows.Count > nRows)
+                    var u = tableUtilities[t];
+                    if (u.DataRows.Count >= nRows)
                     {
-                        toSwitchTables.Add(u);
-                        //simultaneously process 'full' datatables
-                        tasks.Add(Task.Run(() =>
+                        // Hand the full table to a background writer and keep reading.
+                        // At most one batch per table is in flight: wait for the previous one first.
+                        pending[t].Wait();
+                        u.SwitchTables();
+                        pending[t] = Task.Run(() =>
                         {
-                            //send to SQL db
                             u.BulkLoad();
                             u.SyncFromStaging();
-                        }));
+                        });
                     }
                 }
 
-                if (tasks.Count == 0)
-                {
-                    // nothing to send to SQL: read inline rather than paying for a task per entity
-                    LoadDataRows(i, latest);
-                }
-                else
-                {
-                    tasks.Add(Task.Run(() =>
-                    {
-                        //simultaneous new load from Proton .dbs files
-                        LoadDataRows(i, latest);
-                    }));
-
-                    Task.WaitAll(tasks); //wait (block main thread) until all tasks complete
-
-                    foreach (IValueTableUtilities u in toSwitchTables)
-                    {
-                        //for data sent to SQL db at current iteration.
-                        //copy rows in table read from Proton .dbs to table to be sent to SQL at next iteration
-                        //and clear table to recieve data from Proton .dbs at next iteration
-                        u.SwitchTables();
-                    }
-                }
+                LoadDataRows(i, latest);
 
                 prog.WriteProgressBar(counter / (float)nEntities);
             }

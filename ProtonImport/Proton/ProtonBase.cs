@@ -43,7 +43,7 @@ namespace ProtonImport.Proton
 
     public abstract class ProtonDbFileReader : IDisposable
     {
-        private readonly FileStream _fileStream;
+        private readonly Microsoft.Win32.SafeHandles.SafeFileHandle _fileHandle;
 
         private bool _disposedValue;
 
@@ -76,8 +76,8 @@ namespace ProtonImport.Proton
             if (ProtonBase.ProtonFolderPath is null)
                 throw new InvalidOperationException("ProtonBase.ProtonFolderPath must be set before creating a ProtonDbFileReader.");
 
-            _fileStream = new FileStream(Path.Combine(ProtonBase.ProtonFolderPath, dbName), FileMode.Open, FileAccess.Read, FileShare.Read, pageLength, false);
-            FileLength = _fileStream.Length;
+            _fileHandle = File.OpenHandle(Path.Combine(ProtonBase.ProtonFolderPath, dbName), FileMode.Open, FileAccess.Read, FileShare.Read);
+            FileLength = RandomAccess.GetLength(_fileHandle);
             NPages = (int)FileLength/PageLength;
             _pageBuffer = new byte[PageLength];
             DbName = dbName;
@@ -137,9 +137,14 @@ namespace ProtonImport.Proton
 
         private void SetPage(long target)
         {
-            _fileStream.Seek(target, SeekOrigin.Begin);
-
-            _fileStream.ReadExactly(_pageBuffer);
+            // one positioned read per page (no separate seek, no stream buffer to invalidate)
+            int read = 0;
+            while (read < _pageBuffer.Length)
+            {
+                int n = RandomAccess.Read(_fileHandle, _pageBuffer.AsSpan(read), target + read);
+                if (n == 0) throw new EndOfStreamException($"Unexpected end of {DbName} reading page at offset {target}");
+                read += n;
+            }
 
             PageMemory = new ReadOnlyMemory<byte>(_pageBuffer);
         }
@@ -190,8 +195,7 @@ namespace ProtonImport.Proton
             {
                 if (disposing)
                 {
-                    _fileStream.Close();
-                    _fileStream.Dispose();
+                    _fileHandle.Dispose();
                    
 
                     // TODO: dispose managed state (managed objects)

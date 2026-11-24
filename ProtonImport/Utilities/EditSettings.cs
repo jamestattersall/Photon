@@ -144,7 +144,7 @@ namespace ProtonImport.Utilities
                     {
                         Log.Information("Connecting to SQL Server {Server} and database {DBname} using {cnn}", appsettings.Server, appsettings.DBname, appsettings.SQLConnectionString());
 
-                        ValuesLoader.ImportAll(1000);
+                        ValuesLoader.ImportAll();
                     }
                     break;
 

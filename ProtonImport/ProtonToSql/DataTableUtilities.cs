@@ -32,6 +32,9 @@ namespace ProtonImport.ProtonToSql
 
         /// <summary>Discard rows read so far without sending them to SQL.</summary>
         void ClearReading();
+
+        /// <summary>Drop the staging tables kept between batches (call once at the end of a run).</summary>
+        void DropStaging();
     }
 
     public static class MyExtensions
@@ -142,10 +145,14 @@ namespace ProtonImport.ProtonToSql
         public TableUtilities()
         {
             cnn = new(Utilities.ConfigurationManager.AppSettings.SQLConnectionString());
-            sqlBulkCopy = new(Utilities.ConfigurationManager.AppSettings.SQLConnectionString(), SqlBulkCopyOptions.TableLock);
+            sqlBulkCopy = new(Utilities.ConfigurationManager.AppSettings.SQLConnectionString(), SqlBulkCopyOptions.TableLock)
+            {
+                BulkCopyTimeout = 500
+            };
             if (cnn.State != ConnectionState.Open) cnn.Open();
 
             dtReading = emptyDataTable.Clone();
+            dtWriting = emptyDataTable.Clone();
             NeedsStagingTable = true;
             cdCreateStagingTable = new SqlCommand(Sql.SqlCreateStagingTable(tableName), cnn)
             {
@@ -160,9 +167,14 @@ namespace ProtonImport.ProtonToSql
 
         }
 
+        /// <summary>
+        /// Hands the rows read so far to the writer and starts a fresh reading table.
+        /// Swaps the two tables rather than copying; the old writing table has already been
+        /// sent to SQL, so it is cleared and reused for reading.
+        /// </summary>
         public virtual void SwitchTables()
         {
-            dtWriting = dtReading.Copy();
+            (dtWriting, dtReading) = (dtReading, dtWriting);
             dtReading.Clear();
         }
 
@@ -174,6 +186,8 @@ namespace ProtonImport.ProtonToSql
         public virtual void AddProcessedEntity(int entityId) { }
 
         public virtual void ClearReading() => dtReading.Clear();
+
+        public virtual void DropStaging() { }
 
         private void CreateDataTable(List<T> values)
         {
@@ -283,8 +297,7 @@ namespace ProtonImport.ProtonToSql
             sb.AppendLine(sqlCreatePk);
             sb.AppendLine(sqlDeleteFromStaging);
             sb.AppendLine(SqlUpsert);
-            sb.AppendLine(SqlDeleteStagingTable);
-            sb.AppendLine(Sql.SqlDeleteStagingEntityIdsTable(tableName));
+            // staging tables are kept between batches (truncated, not recreated) and dropped by DropStaging
             sqlSyncFromStaging = sb.ToString();
         }
 
@@ -298,11 +311,29 @@ namespace ProtonImport.ProtonToSql
         public ValueTableUtilities()
         {
             SwitchTables();
-            idsBulkCopy = new(cnn) { DestinationTableName = idsTableName };
+            idsBulkCopy = new(cnn) { DestinationTableName = idsTableName, BulkCopyTimeout = 500 };
             cdCreateIdsTable = new SqlCommand(Sql.SqlCreateStagingEntityIdsTable(tableName), cnn)
             {
                 CommandTimeout = 500
             };
+        }
+
+        public override void DropStaging()
+        {
+            try
+            {
+                if (cnn.State != ConnectionState.Open) cnn.Open();
+                using SqlCommand cmd = new(SqlDeleteStagingTable + Environment.NewLine + Sql.SqlDeleteStagingEntityIdsTable(tableName), cnn)
+                {
+                    CommandTimeout = 500
+                };
+                cmd.ExecuteNonQuery();
+                NeedsStagingTable = true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, $"Unable to drop staging tables for {tableName}");
+            }
         }
 
         public override void AddProcessedEntity(int entityId) => idsReading.Rows.Add(entityId);

@@ -489,9 +489,9 @@ namespace ProtonImport.Proton
                         rawText = rawText[..^1]; //remove
                     }
 
-                    // need a writeable span ;
-                    Span<byte> writeable = Unsafe.As<ReadOnlySpan<byte>, Span<byte>>(ref rawText);
-                    // slow safe version: var writeable = rawText.ToArray().AsSpan(); 
+                    // work on a copy: editing the page buffer in place would corrupt it
+                    // if the same page is read again from the cache
+                    Span<byte> writeable = rawText.ToArray();
 
                     // [NUL] and [DEL] interpreted as [LF]
                     writeable.Replace(DEL, LF);
@@ -636,10 +636,11 @@ namespace ProtonImport.Proton
             int found = int.MaxValue;
             int page = 0;
             List<int> skipped = [];
-            //check every page in data.dbs.
+            var pageEntityIds = PageEntityIds();
+            //check every page in data.dbs belonging to this entity.
             for (int i = 1; i <= NPages; i++)
             {
-                if (MoveToPage(i) && EntityId == entityId)
+                if (pageEntityIds[i] == entityId && MoveToPage(i))
                 {
                     short hiitemid = HighItemId;
                     if( hiitemid > itemId && (hiitemid + _currentItemId) < found) 
@@ -668,6 +669,25 @@ namespace ProtonImport.Proton
             }
             Log.Warning($"No valid page found. Any values in rows higher than {Seq} for Item {itemId} and in all rows for items higher than {itemId} have not been imported.");
             return false;
+        }
+
+        // owning entity of every page (index = page id, 0 = invalid page).
+        // Built on the first broken chain so later ones don't each rescan the whole file.
+        private int[]? _pageEntityIds;
+
+        private int[] PageEntityIds()
+        {
+            if (_pageEntityIds == null)
+            {
+                Log.Information("Indexing DATA.DBS pages by entity (once per run)..");
+                var ids = new int[NPages + 1];
+                for (int i = 1; i <= NPages; i++)
+                {
+                    if (MoveToPage(i)) ids[i] = EntityId;
+                }
+                _pageEntityIds = ids;
+            }
+            return _pageEntityIds;
         }
 
         public override bool MoveToPage(int pagePtr)

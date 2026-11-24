@@ -21,7 +21,7 @@ try
     else if (ConfigurationManager.AppSettings.IsValid())
     {
         Log.Information("Import started");
-        ValuesLoader.ImportAll(1000);
+        ValuesLoader.ImportAll();
         Log.Information("Import ended");
     }
     else

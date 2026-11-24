@@ -41,31 +41,36 @@
         }
 
 
+        // key -> entity id, per entity type; each built on first lookup for that type
+        private readonly Dictionary<short, Dictionary<string, int>> _keyMaps = [];
+
         public int GetEntityId(short entityTypeId, string key)
         {
-            var entInfo = KeyEntityInfos[entityTypeId];
-            if (_index.MoveToPage(entInfo.StartIndexId))
+            if (!_keyMaps.TryGetValue(entityTypeId, out var map))
+            {
+                map = LoadKeyMap(entityTypeId);
+                _keyMaps.Add(entityTypeId, map);
+            }
+            return map.GetValueOrDefault(key);
+        }
+
+        /// <summary>
+        /// Reads the whole key index for an entity type once. The first entry for a key wins,
+        /// matching the order Proton stores them in.
+        /// </summary>
+        private Dictionary<string, int> LoadKeyMap(short entityTypeId)
+        {
+            Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
+            if (KeyEntityInfos.TryGetValue(entityTypeId, out var entInfo) &&
+                _index.MoveToPage(entInfo.StartIndexId))
             {
                 _index.SetBlockLength(entInfo.KeyLength);
-
-                while (string.Compare(_index.KeyText, key, true) < 0)
+                while (_index.MoveToNextBlock())
                 {
-                    if (!_index.MoveToNextPage()) return 0;
+                    map.TryAdd(_index.KeyText, _index.EntityId);
                 }
-
-                _index.MoveToPreviousPage();
-
-                while (string.Compare(_index.KeyText, key, true) < 0)
-                {
-                    if (!_index.MoveToNextBlock()) return 0;
-                }
-                if (_index.KeyText.Equals(key, StringComparison.OrdinalIgnoreCase))
-                {
-                    return _index.EntityId;
-                }
-            }            
-
-            return 0;
+            }
+            return map;
         }
 
         public void Dispose()
