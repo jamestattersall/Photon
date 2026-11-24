@@ -456,11 +456,15 @@ namespace ProtonImport.ProtonToSql
         public const int DefaultBatchRows = 50_000;
 
         /// <summary>
-        /// Full import/update pipeline: values, then indexes, entities and entity names.
+        /// Full import/update pipeline: values, then indexes, then entities (with their names).
         /// Used by both the scheduled (no-argument) run and the settings menu.
         /// </summary>
         public static void ImportAll(int nRows = DefaultBatchRows)
         {
+            if (!Utilities.ConfigurationManager.AppSettings.NoLoad)
+            {
+                DatabaseSchema.Apply();
+            }
             using ValuesLoader dsl = new();
             dsl.LoadValues(nRows);
             if (!Utilities.ConfigurationManager.AppSettings.NoLoad &&
@@ -468,7 +472,6 @@ namespace ProtonImport.ProtonToSql
             {
                 EntityLoader.LoadIndexes(nRows);
                 EntityLoader.LoadEntities(nRows);
-                EntityLoader.UpdateEntityNames();
             }
         }
 

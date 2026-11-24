@@ -92,13 +92,15 @@ namespace ProtonImport.ProtonToSql
             }
             else Log.Information("Loading Entities..");
             prog.WriteProgressBar(0);
+            var names = GetEntityNames();
             var tPages = vrx.NPages;
             for (int i = 1; i <= tPages; i++)
             {
                 if (patsts.MoveToPage(i) && vrx.MoveToPage(i))
                 {
-       
-                    tableUtilities.DataRows.Add(i, 0, "", patsts.Updated);
+                    // stage the real name and type, so the upsert only touches entities that changed
+                    var (entityTypeId, name) = names.GetValueOrDefault(i, ((short)0, ""));
+                    tableUtilities.DataRows.Add(i, entityTypeId, name, patsts.Updated);
                     if (exists && i > maxId)
                     {
                        exists = false;
@@ -199,17 +201,30 @@ namespace ProtonImport.ProtonToSql
 
         }
 
-        public static void UpdateEntityNames()
+        /// <summary>
+        /// Name (term in its entity type's default index) and entity type for every indexed entity.
+        /// Requires Indexes to be loaded first. If an entity has several terms, the first in
+        /// term order is used, so the choice is the same on every run.
+        /// </summary>
+        private static Dictionary<int, (short EntityTypeId, string Name)> GetEntityNames()
         {
-            string sql = @"
-UPDATE Entities
-SET Name=i.Term, EntityTypeId=a.EntityTypeId
+            const string sql = @"
+SELECT i.EntityId, a.EntityTypeId, i.Term
 FROM Attributes a
-INNER JOIN EntityTypes et on et.IdAttributeId=a.Id
-INNER JOIN Indexes i ON i.IndexTypeId=et.DefaultIndexTypeId 
-INNER JOIN Entities e ON e.Id=i.EntityId";
-            using Proton2Context ctx = new();
-            ctx.Database.ExecuteSqlRaw(sql);
+INNER JOIN EntityTypes et ON et.IdAttributeId = a.Id
+INNER JOIN Indexes i ON i.IndexTypeId = et.DefaultIndexTypeId
+ORDER BY i.EntityId, i.Term";
+
+            Dictionary<int, (short, string)> names = [];
+            using SqlConnection cnn = new(Utilities.ConfigurationManager.AppSettings.SQLConnectionString());
+            cnn.Open();
+            using SqlCommand cmd = new(sql, cnn) { CommandTimeout = 500 };
+            using SqlDataReader reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                names.TryAdd(reader.GetInt32(0), (reader.GetInt16(1), reader.GetString(2)));
+            }
+            return names;
         }
     }
 }

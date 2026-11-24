@@ -56,6 +56,7 @@ namespace ProtonImport.ProtonToSql
             {
                return;
             }
+            DatabaseSchema.Apply();
             float nTables = 11;
 
             using Proton2Context ctx = new();

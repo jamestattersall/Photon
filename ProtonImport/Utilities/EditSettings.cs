@@ -153,7 +153,6 @@ namespace ProtonImport.Utilities
                     {
                         EntityLoader.LoadIndexes(1000);
                         EntityLoader.LoadEntities(1000);
-                        EntityLoader.UpdateEntityNames();
                     }
                     break;
                 case 14:
