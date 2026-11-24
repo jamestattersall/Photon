@@ -97,7 +97,7 @@ INNER JOIN Lookups l on (a.LookupTypeId>0 AND l.LookupTypeId=a.LookupTypeId) OR 
 WHERE a.Id=@AttributeId
 AND l.Name like @SearchTerm + '%'
 ORDER BY l.Name",
-        new { AttributeId = attributeId, SearchTerm = searchTerm, NRows = nRows });
+        new { AttributeId = attributeId, SearchTerm = AnsiSearchTerm(searchTerm), NRows = nRows });
     }
     public async Task<IEnumerable<IndexType>> GetLookups(int attributeId, int page, int nRows)
     {
@@ -188,9 +188,17 @@ AND Term LIKE @term + '%'
 ORDER BY Term
 OFFSET @startRow ROWS 
 FETCH NEXT @Nrows ROWS ONLY",
-            new { IndexTypeId = indexTypeId, term = searchTerm, StartRow = page * nRows, Nrows = nRows });
+            new { IndexTypeId = indexTypeId, term = AnsiSearchTerm(searchTerm), StartRow = page * nRows, Nrows = nRows });
         }
     }
+
+    /// <summary>
+    /// Search terms compared with varchar(255) columns (Indexes.Term, Lookups.Name).
+    /// Dapper sends strings as nvarchar by default; comparing that with a varchar column makes
+    /// SQL Server convert the column, which can turn an index seek into a scan.
+    /// </summary>
+    private static DbString AnsiSearchTerm(string? term) =>
+        new() { Value = term, IsAnsi = true, Length = 255 };
 
     public async Task<IEnumerable<DatedValue>> GetDatedValues(int entityId, short attributeId)
     {
