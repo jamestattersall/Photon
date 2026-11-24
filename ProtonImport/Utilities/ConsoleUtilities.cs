@@ -1,7 +1,7 @@
 ﻿
 using System.ComponentModel.DataAnnotations;
 
-namespace ProtonConsole2.Utilities
+namespace ProtonImport.Utilities
 {
     public class Progress
     {

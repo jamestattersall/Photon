@@ -1,4 +1,4 @@
-﻿using ProtonConsole2.Proton;
+﻿using ProtonImport.Proton;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-namespace ProtonConsole2.Proton
+namespace ProtonImport.Proton
 {
     interface IProtonBase
     {

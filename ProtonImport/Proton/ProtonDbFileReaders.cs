@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 
 using System.Text;
-namespace ProtonConsole2.Proton
+namespace ProtonImport.Proton
 {
     /// <summary>
     /// DICT.DBS one page for each DICT code (an ad-hoc list of lookup codes, created by database admin) 
@@ -100,6 +100,9 @@ namespace ProtonConsole2.Proton
         // VALID.DBS page numbers the same as ITEM.DBS
         // additional data for attribute, required only for input validation.
 
+        // Validation limits are stored as SQL float, which cannot hold NaN/infinity.
+        private static double Finite(float value) => float.IsFinite(value) ? value : 0;
+
         public double Max(short DataType, short SubType)
         {
             return DataType switch
@@ -107,8 +110,8 @@ namespace ProtonConsole2.Proton
                 2 => SubType > 0 ? GetInt8(40) : GetUInt8(40),
                 3 => SubType > 0 ? GetInt16(40) : GetUInt16(40),
                 4 => SubType > 0 ? GetInt32(40) : GetUInt32(40),
-                5 => (double)GetSingle(40),
-                6 => (double)GetDouble(40),
+                5 => Finite(GetSingle(40)),
+                6 => Finite(GetDouble(40)),
                 7 => GetInt16(40),
                 _ => 0,
             };
@@ -120,8 +123,8 @@ namespace ProtonConsole2.Proton
                 2 => SubType > 0 ? GetInt8(32) : GetUInt8(32),
                 3 => SubType > 0 ? GetInt16(32) : GetUInt16(32),
                 4 => SubType > 0 ? GetInt32(32) : GetUInt32(32),
-                5 => (double)GetSingle(32),
-                6 => (double)GetDouble(32),
+                5 => Finite(GetSingle(32)),
+                6 => Finite(GetDouble(32)),
                 7 => GetInt16(32),
                 _ => 0,
             };

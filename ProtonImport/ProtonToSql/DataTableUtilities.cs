@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
-using ProtonConsole2.DataContext;
+using ProtonImport.DataContext;
 using Serilog;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -13,7 +13,7 @@ using System.Text;
 using System.Threading.Tasks;
 using EntityType = Microsoft.EntityFrameworkCore.Metadata.Internal.EntityType;
 
-namespace ProtonConsole2.protonToSql
+namespace ProtonImport.ProtonToSql
 {
 
     interface IValueTableUtilities : IDisposable
@@ -23,6 +23,15 @@ namespace ProtonConsole2.protonToSql
         void SwitchTables();
         void MergeTables();
         DataRowCollection DataRows { get;  }
+
+        /// <summary>
+        /// Record that an entity has been fully re-read into the current batch, so its stale rows
+        /// can be deleted even if it now has no rows in this table.
+        /// </summary>
+        void AddProcessedEntity(int entityId);
+
+        /// <summary>Discard rows read so far without sending them to SQL.</summary>
+        void ClearReading();
     }
 
     public static class MyExtensions
@@ -62,6 +71,7 @@ namespace ProtonConsole2.protonToSql
         protected DataTable dtWriting = new();  //used for asynchronous loads with simultaneous reading from Proton .dbs and writing to SQL db 
         protected bool NeedsStagingTable = true;
         protected bool forSync = true;
+        protected bool loadFailed = false;  // set when a bulk write fails, so the following sync is skipped
         protected static Proton2Context ctx = new();
 
 
@@ -89,7 +99,7 @@ namespace ProtonConsole2.protonToSql
             {
                 if (attr is PrimaryKeyAttribute a)
                 {
-                    keyColumnNames = [.. a.PropertyNames];
+                    keyColumnNames = [.. a.PropertyNames.Select(n => $"[{n}]")];
                 }
             }
 
@@ -150,7 +160,7 @@ namespace ProtonConsole2.protonToSql
 
         }
 
-        public void SwitchTables()
+        public virtual void SwitchTables()
         {
             dtWriting = dtReading.Copy();
             dtReading.Clear();
@@ -160,6 +170,10 @@ namespace ProtonConsole2.protonToSql
         {
             dtWriting = dtReading;
         }
+
+        public virtual void AddProcessedEntity(int entityId) { }
+
+        public virtual void ClearReading() => dtReading.Clear();
 
         private void CreateDataTable(List<T> values)
         {
@@ -183,7 +197,7 @@ namespace ProtonConsole2.protonToSql
 
         public DataRowCollection DataRows => dtReading.Rows;
   
-        public void BulkLoad()
+        public virtual void BulkLoad()
         {
 
             if (forSync && NeedsStagingTable) CreateStagingTable();
@@ -195,11 +209,12 @@ namespace ProtonConsole2.protonToSql
             }
             catch (Exception ex)
             {
+                loadFailed = true;
                 Log.Error(ex, $"Unable to write {sqlBulkCopy.DestinationTableName} to server.");
             }
         }
 
-        private void CreateStagingTable()
+        protected virtual void CreateStagingTable()
         {
             try
             {
@@ -216,6 +231,14 @@ namespace ProtonConsole2.protonToSql
 
         public void SyncFromStaging()
         {
+            if (loadFailed)
+            {
+                // staging holds an incomplete batch; syncing it would delete rows that failed to load
+                Log.Error($"Skipping sync of {stagingTableName} because the bulk write failed. Rows in this batch were not imported.");
+                loadFailed = false;
+                NeedsStagingTable = true;   // recreating the staging table truncates it
+                return;
+            }
             if (forSync)
             {
                 if (cnn.State != ConnectionState.Open) cnn.Open();
@@ -233,7 +256,7 @@ namespace ProtonConsole2.protonToSql
             }
         }
 
-        public void Dispose()
+        public virtual void Dispose()
         {
             cnn.Dispose();
             sqlBulkCopy.Close();
@@ -246,35 +269,92 @@ namespace ProtonConsole2.protonToSql
 
     internal class ValueTableUtilities<T> : TableUtilities<T> where T : class
     {
-        private readonly int maxId;
-        private readonly SqlCommand cdMaxEntityId;
+        private static readonly string idsTableName = Sql.StagingEntityIdsTableName(tableName);
+        private readonly SqlBulkCopy idsBulkCopy;
+        private readonly SqlCommand cdCreateIdsTable;
+        private DataTable idsReading = NewIdsTable();
+        private DataTable idsWriting = NewIdsTable();
 
         static ValueTableUtilities()
         {
-            string sqlDeleteFromStaging = Sql.SqlValuesDeleteFromStaging(tableName, [.. keyColumnNames]); ;
+            string sqlDeleteFromStaging = Sql.SqlValuesDeleteFromStaging(tableName, [.. keyColumnNames]);
 
             StringBuilder sb = new();
             sb.AppendLine(sqlCreatePk);
             sb.AppendLine(sqlDeleteFromStaging);
             sb.AppendLine(SqlUpsert);
             sb.AppendLine(SqlDeleteStagingTable);
+            sb.AppendLine(Sql.SqlDeleteStagingEntityIdsTable(tableName));
             sqlSyncFromStaging = sb.ToString();
+        }
+
+        private static DataTable NewIdsTable()
+        {
+            DataTable dt = new();
+            dt.Columns.Add("EntityId", typeof(int));
+            return dt;
         }
 
         public ValueTableUtilities()
         {
             SwitchTables();
-
-            cdMaxEntityId = new SqlCommand(Sql.SqlMaxEntityId(tableName), cnn)
+            idsBulkCopy = new(cnn) { DestinationTableName = idsTableName };
+            cdCreateIdsTable = new SqlCommand(Sql.SqlCreateStagingEntityIdsTable(tableName), cnn)
             {
                 CommandTimeout = 500
             };
-            if (forSync)
+        }
+
+        public override void AddProcessedEntity(int entityId) => idsReading.Rows.Add(entityId);
+
+        public override void ClearReading()
+        {
+            dtReading.Clear();
+            idsReading.Clear();
+        }
+
+        public override void SwitchTables()
+        {
+            base.SwitchTables();
+            idsWriting = idsReading;
+            idsReading = NewIdsTable();
+        }
+
+        protected override void CreateStagingTable()
+        {
+            base.CreateStagingTable();
+            try
             {
-                maxId=(int)cdMaxEntityId.ExecuteScalar();
+                cdCreateIdsTable.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                loadFailed = true;
+                Log.Fatal(ex, $"Unable to create {idsTableName}");
             }
         }
 
+        public override void BulkLoad()
+        {
+            base.BulkLoad();
+            if (!forSync || loadFailed) return;
+            try
+            {
+                idsBulkCopy.WriteToServer(idsWriting);
+            }
+            catch (Exception ex)
+            {
+                loadFailed = true;
+                Log.Error(ex, $"Unable to write {idsTableName} to server.");
+            }
+        }
+
+        public override void Dispose()
+        {
+            idsBulkCopy.Close();
+            cdCreateIdsTable.Dispose();
+            base.Dispose();
+        }
     }
 
     internal class MetaTableUtilities<T> : TableUtilities<T> where T : class

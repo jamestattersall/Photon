@@ -1,17 +1,14 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using ProtonConsole2.DataContext;
-using ProtonConsole2.Proton;
-using ProtonConsole2.Utilities;
-using Newtonsoft.Json;
+using ProtonImport.DataContext;
+using ProtonImport.Proton;
+using ProtonImport.Utilities;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Text.Json;
-using ProtonConsole2.protonToSql;
 using Serilog;
 
-namespace ProtonConsole2.ProtonToSql
+namespace ProtonImport.ProtonToSql
 {
     class IndexComparer : IEqualityComparer<DataContext.Index>
     {

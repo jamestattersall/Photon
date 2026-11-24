@@ -1,8 +1,6 @@
-﻿using Microsoft.IdentityModel.Tokens;
-using ProtonConsole2.DataContext;
-using ProtonConsole2.Proton;
-using ProtonConsole2.protonToSql;
-using ProtonConsole2.ProtonToSql;
+using ProtonImport.DataContext;
+using ProtonImport.Proton;
+using ProtonImport.ProtonToSql;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -13,7 +11,7 @@ using System.Net.NetworkInformation;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ProtonConsole2.Utilities
+namespace ProtonImport.Utilities
 {
     internal class Questioner
     {
@@ -146,14 +144,7 @@ namespace ProtonConsole2.Utilities
                     {
                         Log.Information("Connecting to SQL Server {Server} and database {DBname} using {cnn}", appsettings.Server, appsettings.DBname, appsettings.SQLConnectionString());
 
-                        using ValuesLoader dsl = new();
-                        dsl.LoadValues(1000);
-                        if (dsl.EntitiesLoaded > 0 || dsl.EntitiesUpdated > 0)
-                        {
-                            EntityLoader.LoadIndexes(1000);
-                            EntityLoader.LoadEntities(1000);
-                            EntityLoader.UpdateEntityNames();
-                        }
+                        ValuesLoader.ImportAll(1000);
                     }
                     break;
 

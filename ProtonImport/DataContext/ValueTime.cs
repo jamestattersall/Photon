@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ProtonConsole2.DataContext
+namespace ProtonImport.DataContext
 {
     public partial class ValueTime(int entityId, short attributeId, short seq) : ValueBase(entityId, attributeId, seq)
     {

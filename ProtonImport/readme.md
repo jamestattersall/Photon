@@ -3,9 +3,9 @@
 
 The app should be installed on a windows PC or server with access to MS SQL. 
 
-Depends on .net core 10.0
+Depends on .NET 11.0
 
-Execute the protonConsole2.exe app from a command prompt. Include an arbitary command line argument to force display of the settings interface.
+Execute the ProtonImport.exe app from a command prompt. Include an arbitary command line argument to force display of the settings interface.
 The settings interface will be shown anyway if there are missing or invalid settings in appsettings.json.
 
 The proton database consists of several files all with the file extension .dbs and located in the same directory on the Proton unix server.

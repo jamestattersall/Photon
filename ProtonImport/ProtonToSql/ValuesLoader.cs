@@ -1,20 +1,14 @@
-﻿using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using ProtonConsole2.DataContext;
-using ProtonConsole2.Proton;
-using ProtonConsole2.ProtonToSql;
+﻿using Microsoft.EntityFrameworkCore;
+using ProtonImport.DataContext;
+using ProtonImport.Proton;
 using Serilog;
-using System;
 using System.Data;
-using System.Data.Common;
 using System.Diagnostics;
 
-namespace ProtonConsole2.protonToSql
+namespace ProtonImport.ProtonToSql
 {
 
-    internal class ValuesLoader_new : IDisposable
+    internal class ValuesLoader : IDisposable
     {
         static readonly Dictionary<int, AttributeFn?> AttributeFns = [];
 
@@ -22,8 +16,11 @@ namespace ProtonConsole2.protonToSql
         private readonly Patsts patsts = new();
         private readonly Data data = new();
         private readonly FrText frText = new();
+        private readonly IndexReader indexReader = new();
 
-        private readonly IValueTableUtilities[] tableUtilities;
+        private readonly IValueTableUtilities[] tableUtilities ;
+
+        private int abnormalNumbers = 0;
 
         public struct ValueIndex
         {
@@ -39,7 +36,7 @@ namespace ProtonConsole2.protonToSql
         public int EntitiesUpdated { get; private set; } = 0;
         public int EntitiesSkipped { get; private set; } = 0;
 
-        public ValuesLoader_new()
+        public ValuesLoader()
         {
             tableUtilities = new IValueTableUtilities[Enum.GetNames<ValueTable>().Length];
 
@@ -58,7 +55,7 @@ namespace ProtonConsole2.protonToSql
 
             using Proton.Item item = new();
             using Proton.Valid valid = new();
-            for (int i = 1; i <= item.NPages; i++)
+            for (int i = 1; i <=item.NPages; i++)
             {
                 if (item.MoveToPage(i) &&
                     item.DataType > 0 &&
@@ -149,7 +146,7 @@ namespace ProtonConsole2.protonToSql
         {
             if (vrx.MoveToPage(entityId) &&
                 patsts.MoveToPage(entityId) &&
-                (lastUpdated == null || patsts.Updated > lastUpdated))
+                (lastUpdated == null ||  patsts.Updated > lastUpdated))
             {
                 ValueIndex valueIndex = new() { EntityId = entityId };
 
@@ -186,15 +183,18 @@ namespace ProtonConsole2.protonToSql
 
                         if (fn != null && !data.RawValue.IsEmpty)
                         {
-                            fn.Exec(valueIndex, data.RawValue);
+                           fn.Exec(valueIndex, data.RawValue);
                         }
                         blockIsValid = data.MoveToNextBlock();
                     }
-                    if (lastUpdated == null)
+                    foreach (IValueTableUtilities u in tableUtilities)
+                    {
+                        u.AddProcessedEntity(entityId);
+                    }
+                    if(lastUpdated == null)
                     {
                         EntitiesLoaded++;
-                    }
-                    else
+                    } else
                     {
                         EntitiesUpdated++;
                     }
@@ -219,7 +219,6 @@ namespace ProtonConsole2.protonToSql
                 try
                 {
                     Action!(Utils.DataRows, valueIndex, data, SubtypeId, Utils2?.DataRows);
-
                 }
                 catch (Exception e)
                 {
@@ -230,7 +229,7 @@ namespace ProtonConsole2.protonToSql
 
         private void ProcessString(DataRowCollection dataRows, ValueIndex valueIndex, ReadOnlyMemory<byte> data, short p = 0, DataRowCollection? dataRows2 = null)
         {
-            dataRows.Add(valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, ProtonDbFileReader.GetString(data));
+           dataRows.Add( valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, ProtonDbFileReader.GetString(data));
         }
 
         private void ProcessUint8(DataRowCollection dataRows, ValueIndex valueIndex, ReadOnlyMemory<byte> data, short p = 0, DataRowCollection? dataRows2 = null)
@@ -240,7 +239,7 @@ namespace ProtonConsole2.protonToSql
 
         private void ProcessInt8(DataRowCollection dataRows, ValueIndex valueIndex, ReadOnlyMemory<byte> data, short p = 0, DataRowCollection? dataRows2 = null)
         {
-            dataRows.Add(valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, ProtonDbFileReader.GetUInt8(data[..1]));
+            dataRows.Add(valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, ProtonDbFileReader.GetInt8(data[..1]));
         }
 
         private void ProcessUint16(DataRowCollection dataRows, ValueIndex valueIndex, ReadOnlyMemory<byte> data, short p = 0, DataRowCollection? dataRows2 = null)
@@ -263,11 +262,16 @@ namespace ProtonConsole2.protonToSql
             dataRows.Add(valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, ProtonDbFileReader.GetInt32(GetMemory(data, 4)));
         }
 
-        private static bool CheckFloat(Single res, ValueIndex valueIndex)
+        /// <summary>
+        /// NaN/infinity cannot be stored in SQL and are not real readings, so the value is skipped.
+        /// Logged at Debug per value (could be many); a total is logged as a warning at the end of the load.
+        /// </summary>
+        private bool CheckFloat(Single res, ValueIndex valueIndex)
         {
             if (!Single.IsFinite(res))
             {
-                Log.Warning($"Abnormal number {res}, entity:{valueIndex.EntityId}, attribute:{valueIndex.AttributeId}, Seq:{valueIndex.Seq}");
+                abnormalNumbers++;
+                Log.Debug($"Abnormal number {res} skipped, entity:{valueIndex.EntityId}, attribute:{valueIndex.AttributeId}, Seq:{valueIndex.Seq}");
                 return false;
             }
             return true;
@@ -283,12 +287,12 @@ namespace ProtonConsole2.protonToSql
             }
         }
 
-        private void ProcessDouble(DataRowCollection dataRows, ValueIndex valueIndex, ReadOnlyMemory<byte> data, short subTypeId, DataRowCollection? dataRows2 = null)
+        private void ProcessDouble(DataRowCollection dataRows, ValueIndex valueIndex, ReadOnlyMemory<byte> data, short subTypeId , DataRowCollection? dataRows2 = null)
         {
             Single res = ProtonDbFileReader.GetDouble(GetMemory(data, 8));
             if (CheckFloat(res, valueIndex))
             {
-                dataRows.Add(valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, Math.Round(res, subTypeId));
+                dataRows.Add(valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, Math.Round(res,subTypeId));
             }
         }
 
@@ -374,12 +378,11 @@ namespace ProtonConsole2.protonToSql
         private void ProcessEntityPtr(DataRowCollection dataRows, ValueIndex valueIndex, ReadOnlyMemory<byte> data, short subTypeId = 0, DataRowCollection? dataRows2 = null)
         {
             var key = ProtonDbFileReader.GetString(data);
-            using IndexReader ih = new();
-            if (!string.IsNullOrEmpty(key))
+            if (! string.IsNullOrEmpty(key))
             {
                 dataRows.Add(valueIndex.EntityId, valueIndex.AttributeId, valueIndex.Seq, key);
 
-                var eId = ih.GetEntityId(subTypeId, key);
+                var eId = indexReader.GetEntityId(subTypeId, key);
 
                 if (eId > 0)
                 {
@@ -406,7 +409,7 @@ namespace ProtonConsole2.protonToSql
                 }
             }
             cf.Number = ProtonDbFileReader.GetSingle(GetMemory(data, 4));
-
+           
             return cf;
         }
 
@@ -426,9 +429,9 @@ namespace ProtonConsole2.protonToSql
                     }
                 }
             }
-
+          
             cf.Number = (Single?)ProtonDbFileReader.GetDouble(GetMemory(data, 8));
-
+            
             return cf;
         }
 
@@ -446,12 +449,32 @@ namespace ProtonConsole2.protonToSql
         }
 
 
+        /// <summary>
+        /// Full import/update pipeline: values, then indexes, entities and entity names.
+        /// Used by both the scheduled (no-argument) run and the settings menu.
+        /// </summary>
+        public static void ImportAll(int nRows)
+        {
+            using ValuesLoader dsl = new();
+            dsl.LoadValues(nRows);
+            if (!Utilities.ConfigurationManager.AppSettings.NoLoad &&
+                (dsl.EntitiesLoaded > 0 || dsl.EntitiesUpdated > 0))
+            {
+                EntityLoader.LoadIndexes(nRows);
+                EntityLoader.LoadEntities(nRows);
+                EntityLoader.UpdateEntityNames();
+            }
+        }
+
         public void LoadValues(int nRows)
         {
             var st = Stopwatch.StartNew();
             EntitiesSkipped = 0;
             EntitiesLoaded = 0;
             EntitiesUpdated = 0;
+            abnormalNumbers = 0;
+            bool noLoad = Utilities.ConfigurationManager.AppSettings.NoLoad;
+
             foreach (IValueTableUtilities u in tableUtilities)
             {
                 u.SwitchTables();
@@ -461,31 +484,27 @@ namespace ProtonConsole2.protonToSql
 
             using Proton2Context ctx = new();
 
-            DateTime latest = DateTime.MinValue;
+            // null => first load: every entity is read. Otherwise only entities changed since the last import.
+            DateTime? latest = null;
             if (ctx.Entities.Any())
             {
                 latest = ctx.Entities.Max(e => e.LastUpdated);
             }
 
-            ctx.Database.ExecuteSql($"EXEC sp_msforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT ALL'");
-
-            using SqlBulkCopy bkc = new(Utilities.ConfigurationManager.AppSettings.SQLConnectionString(),
-                SqlBulkCopyOptions.TableLock & SqlBulkCopyOptions.KeepIdentity)
+            if (!noLoad)
             {
-                BatchSize = nRows * 2
-            };
+                ctx.Database.ExecuteSql($"EXEC sp_msforeachtable 'ALTER TABLE ? NOCHECK CONSTRAINT ALL'");
+            }
 
             long nEntities = 0;
-            int nUpdated = 0;
             var prog = new Utilities.Progress(20);
 
-            Action<int> loadFunction = Utilities.ConfigurationManager.AppSettings.NoLoad ? Noload : Process;
+            Action<int> loadFunction = noLoad ? Noload : Process;
 
             if (Utilities.ConfigurationManager.AppSettings.OnlyTheseEntities.Count == 0)
             {
                 nEntities = vrx.NPages;
-                //nEntities = 500;
-                Log.Information($"Loading values for {nEntities} entities.." + DateTime.Now.ToShortDateString());
+                Log.Information($"Loading values for {nEntities} entities..");
                 prog.WriteProgressBar(0);
 
                 for (int i = 1; i <= nEntities; i++)
@@ -504,57 +523,69 @@ namespace ProtonConsole2.protonToSql
                 }
             }
 
-            List<Task> tasks = [];
-
-            foreach (IValueTableUtilities u in tableUtilities)
+            if (!noLoad)
             {
-                //save to SQL any remaining rows in writing table not yet saved
-                //run simultaneously
-                tasks.Add(Task.Run(() =>
-                {
-                    //send to SQL db 
-                    u.BulkLoad();
-                    u.SyncFromStaging();
-                }));
-            }
+                List<Task> tasks = [];
 
-            Task.WaitAll(tasks);
-            tasks.Clear();
-
-            foreach (IValueTableUtilities u in tableUtilities)
-            {
-                //switch to the reading table, populated from data from Proton .dbs at the ultimate iteration
-                u.SwitchTables();
-                tasks.Add(Task.Run(() =>
+                foreach (IValueTableUtilities u in tableUtilities)
                 {
-                    //save to SQL any remaining rows in table not yet saved
+                    //save to SQL any remaining rows in writing table not yet saved
                     //run simultaneously
-                    u.BulkLoad();
-                    u.SyncFromStaging();
-                }));
-            }
+                    tasks.Add(Task.Run(() =>
+                    {
+                        //send to SQL db
+                        u.BulkLoad();
+                        u.SyncFromStaging();
+                    }));
+                }
 
-            Task.WaitAll(tasks);
+                Task.WaitAll(tasks);
+                tasks.Clear();
+
+                foreach (IValueTableUtilities u in tableUtilities)
+                {
+                    //switch to the reading table, populated from data from Proton .dbs at the ultimate iteration
+                    u.SwitchTables();
+                    tasks.Add(Task.Run(() =>
+                    {
+                        //save to SQL any remaining rows in table not yet saved
+                        //run simultaneously
+                        u.BulkLoad();
+                        u.SyncFromStaging();
+                    }));
+                }
+
+                Task.WaitAll(tasks);
+            }
 
             prog.WriteProgressBar(1);
             Console.WriteLine();
             st.Stop();
-            if (Utilities.ConfigurationManager.AppSettings.NoLoad)
+            if (abnormalNumbers > 0)
             {
-                Log.Information($"{nUpdated} entities scanned in {st.Elapsed:hh\\:mm\\:ss}");
+                Log.Warning($"{abnormalNumbers} abnormal numbers (NaN/infinity) skipped; see Debug log entries for details");
+            }
+            if (noLoad)
+            {
+                Log.Information($"{counter} entities scanned in {st.Elapsed:hh\\:mm\\:ss}");
             }
             else
             {
-                Log.Information($"{EntitiesUpdated} Entities updated or loaded");
+                Log.Information($"{EntitiesLoaded} Entities loaded");
+                Log.Information($"{EntitiesUpdated} Entities updated");
                 Log.Information($"{EntitiesSkipped} Entities skipped (already up to date)");
                 Log.Information($"in {st.Elapsed:hh\\:mm\\:ss}");
-
             }
 
             void Noload(int i)
             {
                 counter++;
                 LoadDataRows(i, latest);
+                // scan only: discard what was read so nothing accumulates or reaches SQL
+                foreach (IValueTableUtilities u in tableUtilities)
+                {
+                    u.ClearReading();
+                }
                 prog.WriteProgressBar(counter / (float)nEntities);
             }
 
@@ -575,33 +606,38 @@ namespace ProtonConsole2.protonToSql
                         //simultaneously process 'full' datatables
                         tasks.Add(Task.Run(() =>
                         {
-                            //send to SQL db 
+                            //send to SQL db
                             u.BulkLoad();
                             u.SyncFromStaging();
                         }));
                     }
                 }
-                tasks.Add(Task.Run(() =>
+
+                if (tasks.Count == 0)
                 {
-                    //simultaneous new load from Proton .dbs files
+                    // nothing to send to SQL: read inline rather than paying for a task per entity
                     LoadDataRows(i, latest);
-                }));
-
-                Task.WaitAll(tasks); //wait (block main thread) until all tasks complete
-
-                foreach (IValueTableUtilities u in toSwitchTables)
+                }
+                else
                 {
-                    //for data sent to SQL db at current iteration.
-                    //copy rows in table read from Proton .dbs to table to be sent to SQL at next iteration
-                    //and clear table to recieve data from Proton .dbs at next iteration
-                    u.SwitchTables();
+                    tasks.Add(Task.Run(() =>
+                    {
+                        //simultaneous new load from Proton .dbs files
+                        LoadDataRows(i, latest);
+                    }));
+
+                    Task.WaitAll(tasks); //wait (block main thread) until all tasks complete
+
+                    foreach (IValueTableUtilities u in toSwitchTables)
+                    {
+                        //for data sent to SQL db at current iteration.
+                        //copy rows in table read from Proton .dbs to table to be sent to SQL at next iteration
+                        //and clear table to recieve data from Proton .dbs at next iteration
+                        u.SwitchTables();
+                    }
                 }
 
-
-                nUpdated++;
-
                 prog.WriteProgressBar(counter / (float)nEntities);
-
             }
         }
 
@@ -631,10 +667,11 @@ namespace ProtonConsole2.protonToSql
             frText.Dispose();
             data.Dispose();
             patsts.Dispose();
+            indexReader.Dispose();
 
             foreach (IValueTableUtilities util in tableUtilities)
             {
-                util.Dispose();
+               util.Dispose();
             }
         }
     }

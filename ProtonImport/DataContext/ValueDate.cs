@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ProtonConsole2.DataContext;
+namespace ProtonImport.DataContext;
 
 [PrimaryKey(nameof(EntityId), nameof(AttributeId), nameof(Seq))]
 public abstract class ValueBase(int entityId, short attributeId, short seq)

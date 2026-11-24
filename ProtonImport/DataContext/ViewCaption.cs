@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ProtonConsole2.DataContext;
+namespace ProtonImport.DataContext;
 
 [PrimaryKey(nameof(ViewId), nameof(Seq))]
 public partial class ViewCaption

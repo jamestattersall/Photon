@@ -1,7 +1,7 @@
-﻿using ProtonConsole2.Proton;
+﻿using ProtonImport.Proton;
 using System.Buffers.Binary;
 
-namespace ProtonConsole2.Proton
+namespace ProtonImport.Proton
 {
 
     public class BigEndianIntegerPrimitive : Proton.IPrimativeIntConverter
@@ -36,16 +36,12 @@ namespace ProtonConsole2.Proton
     {
         bool Proton.IPrimativeFloatConverter.IsBigEndian => true;
 
-        float Proton.IPrimativeFloatConverter.DoubleConverter(ReadOnlyMemory<byte> memory) {
-            float res = (float)BinaryPrimitives.ReadDoubleBigEndian(memory.Span);
-            return float.IsRealNumber(res) ? res : 0;
-        }
+        // Returns the raw value (NaN/infinity included); callers decide how to treat non-finite values.
+        float Proton.IPrimativeFloatConverter.DoubleConverter(ReadOnlyMemory<byte> memory)
+            => (float)BinaryPrimitives.ReadDoubleBigEndian(memory.Span);
 
         float Proton.IPrimativeFloatConverter.SingleConverter(ReadOnlyMemory<byte> memory)
-        {
-            float res = BinaryPrimitives.ReadSingleBigEndian(memory.Span);
-            return float.IsRealNumber(res) ? res : 0;
-        }
+            => BinaryPrimitives.ReadSingleBigEndian(memory.Span);
     }
 
     /// IEEE 754 floating point little-endian converter
@@ -53,18 +49,12 @@ namespace ProtonConsole2.Proton
     {
         bool Proton.IPrimativeFloatConverter.IsBigEndian => true;
 
+        // Returns the raw value (NaN/infinity included); callers decide how to treat non-finite values.
         float Proton.IPrimativeFloatConverter.DoubleConverter(ReadOnlyMemory<byte> memory)
-        {
-            float res = (float)BinaryPrimitives.ReadDoubleLittleEndian(memory.Span);
-            return float.IsRealNumber(res) ? res : 0;
-         
-        }
+            => (float)BinaryPrimitives.ReadDoubleLittleEndian(memory.Span);
 
         float Proton.IPrimativeFloatConverter.SingleConverter(ReadOnlyMemory<byte> memory)
-        {
-            float res = BinaryPrimitives.ReadSingleLittleEndian(memory.Span);
-            return float.IsRealNumber(res) ? res : 0 ;
-        }
+            => BinaryPrimitives.ReadSingleLittleEndian(memory.Span);
     }
 
 

@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
-namespace ProtonConsole2.DataContext;
+namespace ProtonImport.DataContext;
 
 public partial class Proton2Context : DbContext
 {

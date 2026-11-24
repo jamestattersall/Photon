@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ProtonConsole2.DataContext;
+namespace ProtonImport.DataContext;
 
 public partial class Menu
 {

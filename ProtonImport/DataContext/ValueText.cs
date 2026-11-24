@@ -1,11 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using ProtonConsole2.DataContext;
+using ProtonImport.DataContext;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ProtonConsole2.DataContext;
+namespace ProtonImport.DataContext;
 
 [Index(nameof(Value))]
 public partial class ValueText(int entityId, short attributeId, short seq) : ValueBase(entityId, attributeId, seq)

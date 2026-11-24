@@ -1,11 +1,11 @@
 ﻿
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Primitives;
-using ProtonConsole2.DataContext;
+using ProtonImport.DataContext;
 using System.Text;
 using System.Text.Encodings.Web;
 
-namespace ProtonConsole2.Proton
+namespace ProtonImport.Proton
 {
     public class MetaDataFunctions
     {

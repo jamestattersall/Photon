@@ -1,8 +1,7 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using ProtonConsole2.DataContext;
-using ProtonConsole2.Proton;
+using ProtonImport.DataContext;
+using ProtonImport.Proton;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -11,7 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ProtonConsole2.protonToSql
+namespace ProtonImport.ProtonToSql
 {
     internal static class EntityLoader
     {
@@ -168,22 +167,18 @@ namespace ProtonConsole2.protonToSql
 
                     index.SetBlockLength(keyLength);
 
-                    int oldEntityId = 0;
-                    byte[] bytes = new byte[keyLength];
-                    Memory<byte> oldKeyText = new(bytes);
+                    // Skip only exact (term, entity) duplicates, which would break the Indexes primary key.
+                    // The same term may belong to several entities (e.g. two patients called SMITH)
+                    // and one entity may have several terms. Normalised like SQL compares terms
+                    // (case-insensitive, trailing spaces ignored).
+                    HashSet<(string Term, int EntityId)> seen = [];
                     while (index.MoveToNextBlock())
                     {
-                        var keyText = index.KeyTextRaw;
+                        var term = ProtonDbFileReader.GetString(index.KeyTextRaw);
                         var entityId = index.EntityId;
-                        if(
-                           // !keyText.IsNullOrEmpty() && 
-                            !keyText.Span.SequenceEqual(oldKeyText.Span) && 
-                            !(entityId == oldEntityId)
-                            )
+                        if (seen.Add((term.TrimEnd().ToUpperInvariant(), entityId)))
                         {
-                            keyText.CopyTo(oldKeyText);
-                            oldEntityId = entityId;
-                            tableUtilities.DataRows.Add( i, ProtonDbFileReader.GetString(keyText), entityId);
+                            tableUtilities.DataRows.Add( i, term, entityId);
                             c++;
                             cc++;
                             if (c > nRows)

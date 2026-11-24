@@ -1,7 +1,6 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
-using ProtonConsole2.Proton;
+using ProtonImport.Proton;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -11,7 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ProtonConsole2.Utilities
+namespace ProtonImport.Utilities
 {
     public static class ConfigurationManager
     {

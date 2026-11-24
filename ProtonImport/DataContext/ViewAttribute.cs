@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
-namespace ProtonConsole2.DataContext;
+namespace ProtonImport.DataContext;
 
 [PrimaryKey(nameof(ViewId), nameof(Seq))]
 public partial class ViewAttribute

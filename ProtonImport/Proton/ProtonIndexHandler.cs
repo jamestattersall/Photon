@@ -1,4 +1,4 @@
-﻿namespace ProtonConsole2.Proton
+﻿namespace ProtonImport.Proton
 {
     
     internal class IndexReader : IDisposable

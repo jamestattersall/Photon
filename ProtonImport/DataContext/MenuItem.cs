@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ProtonConsole2.DataContext
+namespace ProtonImport.DataContext
 {
     [PrimaryKey(nameof(MenuId), nameof(Seq))]
     public class MenuItem
