@@ -70,7 +70,9 @@ namespace ProtonImport.Utilities
                     using Proton2Context ctx = new();
                     Console.WriteLine("[10] Load/update metadata...");
                     Console.WriteLine("[11] Load/update entity data...");
-                    capt = "Enter number 0-11;";
+                    Console.WriteLine("[12] Reload indexes and entities...");
+                    Console.WriteLine("[13] Reload indexes only...");
+                    capt = "Enter number 0-13;";
                 }
                 else
                 {
@@ -151,8 +153,16 @@ namespace ProtonImport.Utilities
                 case 12:
                     if (appsettings.IsValid())
                     {
-                        EntityLoader.LoadIndexes(1000);
-                        EntityLoader.LoadEntities(1000);
+                        EntityLoader.LoadIndexes(ValuesLoader.DefaultBatchRows);
+                        EntityLoader.LoadEntities(ValuesLoader.DefaultBatchRows);
+                    }
+                    break;
+
+                case 13:
+                    // indexes only, without waiting for a full data load (Indexes is truncated and rebuilt)
+                    if (appsettings.IsValid())
+                    {
+                        EntityLoader.LoadIndexes(ValuesLoader.DefaultBatchRows);
                     }
                     break;
                 case 14:

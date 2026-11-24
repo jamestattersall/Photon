@@ -27,7 +27,7 @@ const app = reactive({
     idValues: [],
     page: 0,
     nPages: 0,
-    userStarter: { id: 1, functionId: 1, priv: 255, parameter: 50, entityTypeId: 1, idLineViewId: 128, indexTypeId: 1 },
+    userStarter: { id: 1, functionId: 1, privilege: 255, parameter: 50, entityTypeId: 1, idLineViewId: 128, indexTypeId: 1 },
     pPwd: '',
     loginMessage: "",
     loadMessage: "",
@@ -170,6 +170,14 @@ const app = reactive({
             year = year.substring(2, 4)
         }
         return `${day}.${month}.${year}` ?? '';
+    },
+    // time arrives as 'hh:mm'; shown as 'hh:mm' if the field is wide enough, otherwise 'hhmm'.
+    // Anything else (e.g. 'PRE', 'POST') is shown as it is.
+    getFormattedTime(time, a) {
+        time = time ?? '';
+        if (!/^\d{2}:\d{2}$/.test(time)) return time;
+
+        return a.displayLength > 4 ? time : time.replace(':', '');
     },
     handleCompositeInput(e, v) {
         let raw = e.target.value;

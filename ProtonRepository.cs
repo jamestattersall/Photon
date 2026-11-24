@@ -24,7 +24,13 @@ public class ProtonRepository
 
         if (userStarter != null)
         {
-            userStarter.Menu = await GetMenu(userStarter.Parameter);
+            // MenuId is 0 when the user's starter function isn't a menu: use the first menu instead
+            var menuId = userStarter.MenuId;
+            if (menuId == 0)
+            {
+                menuId = await GetSingleAsync<int?>("SELECT MIN(Id) FROM Menus", new { }) ?? 0;
+            }
+            userStarter.Menu = await GetMenu(menuId);
         }
         return userStarter!;
     }
@@ -222,7 +228,7 @@ ORDER BY d.Value",
 
         using var multi = await cn.QueryMultipleAsync(@"
 SELECT Id, Name FROM Menus WHERE Id=@Id
-SELECT Seq, Name, Priv1, [Function], Parameter1, NextMenuId, StartMenuId
+SELECT Seq, Name, Priv1 , [Function], Parameter1, NextMenuId, StartMenuId
 FROM MenuItems 
 WHERE MenuId=@Id
 AND Seq < 9
@@ -455,7 +461,7 @@ public class DatedValue
 
 public class UserStarter
 {
-    public int Priv { get; set; }
+    public int Privilege { get; set; }
     public int FunctionId { get; set; }
     public int Parameter { get; set; }
     public int EntityTypeId { get; set; }
@@ -465,7 +471,7 @@ public class UserStarter
     {
         get
         {
-            if (FunctionId == 0) return Parameter;
+            if (FunctionId == 1) return Parameter;
             else return 0;
         }
     }

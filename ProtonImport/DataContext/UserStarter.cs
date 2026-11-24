@@ -15,7 +15,9 @@ public partial class UserStarter
 
     [Column(TypeName = "varchar(255)")]
     public string? UserName { get; set; }
-    public short MenuId { get; set; }
+    public short FunctionId { get; set; }
+    public short Privilege { get; set; }
+    public short Parameter { get; set; }
     public short EntityTypeId { get; set; }
     public short IdLineViewId { get; set; }
     public short IndexTypeId { get; set; }

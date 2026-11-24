@@ -100,7 +100,9 @@ namespace ProtonImport.Proton
                             Id = ix,
                             UserCode = passwd.EncryptedPassword,
                             UserName = passwd.UserName,
-                            MenuId = passwd.FunctionParameter,
+                            FunctionId = passwd.FunctionId,
+                            Privilege = passwd.Privilege,
+                            Parameter = passwd.FunctionParameter,
                             EntityTypeId = passwd.EntityTypeId,
                             IdLineViewId = passwd.IdLineScreenId,
                             IndexTypeId = passwd.IndexDefId
@@ -353,7 +355,8 @@ namespace ProtonImport.Proton
                                 Parameter1 = menu.Parameter1,
                                 Parameter2 = menu.Parameter2,
                                 Parameter3 = menu.Parameter3,
-                                Parameter4 = menu.Parameter4
+                                Parameter4 = menu.Parameter4,
+                                Priv1 = menu.Priv1
                             });
                         }
                         c++; 

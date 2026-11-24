@@ -137,7 +137,8 @@ CROSS APPLY (
 
     UNION ALL
 
-    SELECT v.Seq, a.Id, CAST(FORMAT(v.Value, a.[Format]) AS nvarchar(300))
+    -- ISO yyyy-mm-dd (style 23), the format HTML <input type="date"> uses
+    SELECT v.Seq, a.Id, CAST(CONVERT(varchar(10), v.Value, 23) AS nvarchar(300))
     FROM atts a
     INNER JOIN dbo.ValueDates v ON v.EntityId = @EntityId AND v.AttributeId = a.Id AND v.Seq BETWEEN rng.StartRow AND rng.EndRow
 
@@ -149,7 +150,8 @@ CROSS APPLY (
 
     UNION ALL
 
-    SELECT v.Seq, a.Id, CAST(FORMAT(v.Value, a.[Format]) AS nvarchar(300))
+    -- hh:mm (style 108, first 5 characters), the format HTML <input type="time"> uses
+    SELECT v.Seq, a.Id, CAST(CONVERT(varchar(5), v.Value, 108) AS nvarchar(300))
     FROM atts a
     INNER JOIN dbo.ValueTimes v ON v.EntityId = @EntityId AND v.AttributeId = a.Id AND v.Seq BETWEEN rng.StartRow AND rng.EndRow
 ) v;

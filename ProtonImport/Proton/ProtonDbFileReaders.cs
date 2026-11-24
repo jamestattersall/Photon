@@ -153,11 +153,11 @@ namespace ProtonImport.Proton
 
         public byte Priv1 => GetUInt8(Ptr + 14);
 
-        public byte Priv2 => GetUInt8( (Ptr + 15));
+        public byte Priv2 => GetUInt8( Ptr + 15);
 
-        public string Function => GetString( (Ptr + 16), 4);
+        public string Function => GetString( Ptr + 16, 4);
 
-        public short Parameter1 => GetInt16( (Ptr + 20));
+        public short Parameter1 => GetInt16( Ptr + 20);
 
         public short Parameter2 => GetInt16( (Ptr + 22));
 
@@ -193,7 +193,7 @@ namespace ProtonImport.Proton
 
         public short FunctionParameter => GetInt16(14);
 
-        public byte Priviledge => GetUInt8(16);
+        public byte Privilege => GetUInt8(16);
 
         public short EntityTypeId => GetInt16(18);
 

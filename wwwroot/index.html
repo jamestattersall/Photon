@@ -273,7 +273,7 @@
                     <g v-for="a in view.viewAttributes">
                         <text v-for="v in valuesMap[a.attributeId] || []" class="value"
                               :x="a.x * charWidth" :y="lineOrdinal(a,v.seq) * lineHeight">
-                            {{a.dataTypeId==4 ? getFormattedDate(v?.text, a) : v?.text?.substring(0,a.displaylength)}}
+                            {{a.dataTypeId==4 ? getFormattedDate(v?.text, a) : a.dataTypeId==8 ? getFormattedTime(v?.text, a) : v?.text?.substring(0, a.displayLength || undefined)}}
                         </text>
                     </g>
 

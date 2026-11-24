@@ -108,7 +108,7 @@ namespace ProtonImport.ProtonToSql
 UPDATE Menus
 SET EntityTypeId = s.EntityTypeId
 FROM MENUS m
-inner join UserStarters s on s.MenuId=m.Id
+inner join UserStarters s on s.Parameter=m.Id AND s.FunctionId=1
 
 UPDATE Menus
 SET EntityTypeId = i.Parameter1

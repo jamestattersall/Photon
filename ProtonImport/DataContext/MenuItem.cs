@@ -27,6 +27,9 @@ namespace ProtonImport.DataContext
         public short Parameter3 { get; set; }
         public short Parameter4 { get; set; }
 
+        // privilege level required for the menu item (read by Photon's GetMenu)
+        public byte Priv1 { get; set; }
+
         public virtual Menu? Menu { get; set; }
 
     }
