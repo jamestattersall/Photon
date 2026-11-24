@@ -6,4 +6,10 @@
        public bool IsAuthenticated { get; set; }
        public UserStarter? UserStarter { get; set; }
     }
+
+    public class InitialResponse
+    {
+        public string userName { get; set; } = string.Empty;
+        public bool requireNetworkLogin { get; set; } 
+    }
 }

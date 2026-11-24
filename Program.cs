@@ -1,10 +1,16 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
+using Photon;
 using Photon.Models;
 using Serilog;
 using System.Security.Claims;
+using System.DirectoryServices.Protocols;
+using System.Net;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,38 +65,28 @@ app.UseHttpsRedirection();
 
 app.UseFileServer();
 
-
-if (app.Environment.IsDevelopment())
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Windows Auth API v1");
+    options.SwaggerEndpoint("./v1/swagger.json", "Windows Auth API v1");
 
-        // Crucial: Ensure Swagger UI's fetch client includes HTTP-only cookies on every request
-        options.UseRequestInterceptor("(req) => { req.credentials = 'include'; return req; }");
-    });
-}
+    // Crucial: Ensure Swagger UI's fetch client includes HTTP-only cookies on every request
+    options.UseRequestInterceptor("(req) => { req.credentials = 'include'; return req; }");
+});
 
 
 app.UseDefaultFiles();
-if (app.Environment.IsDevelopment())
-{
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        OnPrepareResponse = ctx =>
-        {
-            ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
-            ctx.Context.Response.Headers.Append("Pragma", "no-cache");
-            ctx.Context.Response.Headers.Append("Expires", "0");
-        }
-    });
-}
-else
-{
-    app.UseStaticFiles();
-}
 
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+        ctx.Context.Response.Headers.Append("Pragma", "no-cache");
+        ctx.Context.Response.Headers.Append("Expires", "0");
+    }
+});
+app.MapFallbackToFile("index.html");
 
 app.UseDeveloperExceptionPage();
 
@@ -147,29 +143,89 @@ app.MapGet("/NPages/{viewId},{entityId}", (short viewId, int entityId) =>
 app.MapGet("/Menu/{Id}", (short id) =>
     repository.GetMenu(id)).RequireAuthorization();
 
-app.MapGet("/user", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (HttpContext context) =>
+app.MapGet("/user", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (ClaimsPrincipal user) =>
 {
-    var usr = context.User;
-    return usr.Identity.Name;
+    return Results.Ok(new InitialResponse
+    {
+        userName = user.Identity?.Name ?? string.Empty,
+        requireNetworkLogin = builder.Configuration.GetValue<bool>("AuthSettings:RequireNetworkLogin")
+    });
 });
 
-app.MapPost("/login", async (LoginRequest request, HttpContext context) =>
+app.MapPost("/login", [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)] async (LoginRequest request, HttpContext httpContext, IConfiguration config) =>
 {
     var resp = new LoginResponse();
-    // Validate user credentials
-    if (string.IsNullOrWhiteSpace(request.userName) || string.IsNullOrWhiteSpace(request.nPwd))
+    ClaimsPrincipal princ ;
+    var allowedRoles = new HashSet<string>(config.GetSection("AuthSettings:AllowedRoles").Get<string[]>() ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+    
+    if (builder.Configuration.GetValue<bool>("AuthSettings:RequireNetworkLogin"))
     {
-        resp.Message = "Network user name and password are required.";
-        resp.IsAuthenticated = false;
-        return Results.BadRequest(resp);
+        if (string.IsNullOrWhiteSpace(request.userName) || string.IsNullOrWhiteSpace(request.nPwd))
+        {
+            resp.IsAuthenticated = false;
+            resp.Message = "Username and password are required.";
+            return Results.Ok(resp);
+        }
+
+        // Parse "UHB\pamJamesT" or "pamJamesT"
+        string domain = "UHB"; // Default domain if user omits "UHB\"
+        string username = request.userName.Trim();
+
+        if (username.Contains('\\'))
+        {
+            var parts = username.Split('\\', 2);
+            domain = parts[0];
+            username = parts[1];
+        }
+        else if (username.Contains('@'))
+        {
+            // Handle UPN format (e.g., pamJamesT@uhb.nhs.uk)
+            var parts = username.Split('@', 2);
+            username = parts[1];
+            domain = parts[0];
+        }
+
+        if (!WindowsAuthHelper.ValidateAdCredentialsLdaps(domain, username, request.nPwd, out string error))
+        {
+            resp.IsAuthenticated = false;
+            resp.Message = $"Login failed for {domain}\\{username}. Reason: {error}";
+            
+            Log.Warning($"Login failed for {domain}\\{username}. Reason: {error}");
+            return Results.Ok(resp);
+        }
+
+        // Credentials are valid! 
+        // Fetch roles from AD or your database and issue a session cookie / JWT for your petite-vue app
+        var roles = WindowsAuthHelper.GetUserRoles(domain, username);
+
+        string fullUserName = $"{domain}\\{username}";
+
+        // 4. Build ClaimsIdentity and ClaimsPrincipal
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.Name, fullUserName),
+            new Claim(ClaimTypes.NameIdentifier, fullUserName)
+        };
+
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        princ = new ClaimsPrincipal(claimsIdentity);
+
+
+    } else
+    {
+        princ = httpContext.User; 
     }
-
-
-    var authResult = WindowsAuthHelper.Authenticate(request.userName, request.nPwd);
-    if (!authResult.IsAuthenticated || string.IsNullOrEmpty(authResult.ResolvedUser))
+    var c = princ.Claims.Where(c => allowedRoles.Contains(WindowsAuthHelper.GetClaimName(c)));
+    if (c.Count()==0)
     {
         resp.IsAuthenticated = false;
-        resp.Message = "Invalid network credentials. Code:" + authResult.ErrorCode.ToString();
+        resp.Message = $"User {request.userName} is not in any allowed roles.";
+        Log.Warning("User {UserName} attempted to log in but is not in any allowed roles.", request.userName);
         return Results.Ok(resp);
     }
 
@@ -180,12 +236,23 @@ app.MapPost("/login", async (LoginRequest request, HttpContext context) =>
         {
             resp.IsAuthenticated = false;
             resp.Message = "Password does not match any in Proton.";
+            Log.Warning("User {UserName} attempted to log in but provided an incorrect Proton password.", request.userName);
             return Results.Ok(resp);
         }  
         Log.Information("User {UserName} logged in successfully.", request.userName);
-        resp.Message = "Login successful";
+        resp.Message = "Login successful, loading...";
         resp.IsAuthenticated = true;
         resp.UserStarter = userStarter;
+        
+        await httpContext.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        princ,
+        new AuthenticationProperties
+        {
+            IsPersistent = false, // Session cookie (clears when browser closes)
+            ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(30)
+        });
+
         return Results.Ok(resp);
     }
     catch (Exception ex)

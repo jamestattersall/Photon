@@ -8,6 +8,7 @@ const app = reactive({
     fontSize: 20,  // a.k.a font height = charWidth * 5/3 for monotype font
     lineHeight: 24, // space between lines = charWidth * 2 on a DEC VT-100
     editingValue: null,
+    requireNetworkLogin: false,
     entityType: {},
     view: {},
     views: [],
@@ -27,7 +28,7 @@ const app = reactive({
     page: 0,
     nPages: 0,
     userStarter: { id: 1, functionId: 1, priv: 255, parameter: 50, entityTypeId: 1, idLineViewId: 128, indexTypeId: 1 },
-    pPwd: 'UFCCL',
+    pPwd: '',
     loginMessage: "",
     loadMessage: "",
     menu: { id: 0, name: "", menuItems: [] },
@@ -140,14 +141,21 @@ const app = reactive({
             })
             .catch((error) => console.error(error));
 
+        this.pPwd = '';
+
     },
     async init() {
         
         const response = await fetch(BASE_URL + 'user', {
-            method: 'GET'
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         if (response.ok) {
-            this.userName = await response.text();
+            const data = await response.json();
+            this.userName = data.userName;
+            this.requireNetworkLogin = data.requireNetworkLogin;
         } else {
             console.error('Failed to fetch user:', response.status);
         }
@@ -210,7 +218,6 @@ const app = reactive({
         return await fetchWrapper
             .get('Lookups/' + attributeId + ',' + page + ',' + rows)
             .then(data => {
-                console.log('lookups:' + JSON.stringify(data));
                 this.lookups = data
             })
             .catch((error) => {
@@ -372,7 +379,6 @@ const app = reactive({
             this.valuesMap = Object.groupBy(vals, v => v.attributeId);            
             //get the array of values using bracket notation: this.valuesMap[attributeId]
 
-            console.log(JSON.stringify(this.valuesMap))
             this.isEditable = false;
 
         } catch (error) {
@@ -750,7 +756,7 @@ class FetchWrapper {
             method: 'POST',
             body: JSON.stringify(data),
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            credentials: 'same-origin'
+            credentials: 'include'
         });
         if (!response.ok) {
             console.log(response.status);

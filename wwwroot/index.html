@@ -20,18 +20,101 @@
         >
 
         <!--login view -->
-        <g v-if="sideMode==0">
-            <text :x="2 * charWidth" :y="2 * lineHeight + fontSize" class="caption">Network username:</text>
-            <foreignObject :x="19 * charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="1 * lineHeight">
-                <input type="text" class="text" v-model="userName"  />
-            </foreignObject>
-            <text :x="2 * charWidth" :y="4 * lineHeight + fontSize" class="caption">Network password:</text>
-            <foreignObject :x="19 * charWidth" :y="4 * lineHeight" :width="18 * charWidth" :height="1 * lineHeight">
-                <input type="text" v-model="nPwd" autocomplete="off" class="masked-secret text"  />
-            </foreignObject>
+        <g v-show="sideMode==0">
+
+            <svg xmlns="http://w3.org" viewBox="0 0 200 200" :width="3 * charWidth" :height="1.5 * lineHeight" role="img" aria-label="Photon App Animated Gamma Logo">
+                <defs>
+                    <!-- Ambient outer glow for depth on a navy background -->
+                    <filter id="photon-glow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="5" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+
+                    <!-- Base gradient for the gamma symbol -->
+                    <linearGradient id="gamma-base" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#38bdf8" />
+                        <stop offset="50%" stop-color="#0ea5e9" />
+                        <stop offset="100%" stop-color="#0284c7" />
+                    </linearGradient>
+
+                    <!-- Animated diagonal shimmer highlight -->
+                    <linearGradient id="shimmer-wave" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+                        <stop offset="40%" stop-color="#e0f2fe" stop-opacity="0.15" />
+                        <stop offset="50%" stop-color="#ffffff" stop-opacity="0.95" />
+                        <stop offset="60%" stop-color="#e0f2fe" stop-opacity="0.15" />
+                        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+
+                        <!-- Sweeps the light across the symbol every 3.5 seconds -->
+                        <animateTransform attributeName="gradientTransform"
+                                          type="translate"
+                                          from="-1.2 -1.2"
+                                          to="1.2 1.2"
+                                          dur="3.5s"
+                                          repeatCount="indefinite" />
+                    </linearGradient>
+
+                    <!-- Reusable geometric path for a sleek lowercase gamma (γ) -->
+                    <path id="gamma-shape"
+                          d="M 56,58
+             C 72,58 84,84 97,118
+             C 113,86 128,58 144,58
+             M 97,118
+             C 106,144 108,168 96,168
+             C 84,168 86,144 97,118 Z"
+                          fill="none"
+                          stroke-width="13"
+                          stroke-linecap="round"
+                          stroke-linejoin="round" />
+                </defs>
+
+                <!-- Subtle clinical data-node ring in the background -->
+                <circle cx="100" cy="108" r="76" fill="none" stroke="#38bdf8" stroke-width="1" stroke-dasharray="3 7" opacity="0.25">
+                    <animateTransform attributeName="transform"
+                                      type="rotate"
+                                      from="0 100 108"
+                                      to="360 100 108"
+                                      dur="45s"
+                                      repeatCount="indefinite" />
+                </circle>
+
+                <!-- Main Gamma Group with Glow -->
+                <g filter="url(#photon-glow)">
+                    <!-- Base Gamma Layer -->
+                    <use href="#gamma-shape" stroke="url(#gamma-base)" />
+
+                    <!-- Shimmer Overlay Layer -->
+                    <use href="#gamma-shape" stroke="url(#shimmer-wave)" />
+                </g>
+
+                <!-- Twinkling photon spark at the top-right terminal -->
+                <circle cx="144" cy="58" r="3" fill="#ffffff">
+                    <animate attributeName="opacity" values="0.2;1;0.2" dur="3.5s" begin="1.1s" repeatCount="indefinite" />
+                    <animate attributeName="r" values="2;4.5;2" dur="3.5s" begin="1.1s" repeatCount="indefinite" />
+                </circle>
+            </svg>
+            <line x1="0" :y1="1.5 * lineHeight" :x2="80 * charWidth" :y2="1.5 * lineHeight"></line>
+            <line x1="0" :y1="20.5 * lineHeight" :x2="80 * charWidth" :y2="20.5 * lineHeight"></line>
+            <line :x1="40 * charWidth" :y1="20.5 * lineHeight" :x2="40 * charWidth" :y2="24 * lineHeight"></line>
+            <line x1="0" y1="0" x2="0" :y2="24 * lineHeight"></line>
+
+            <text :x="3 * charWidth" :y="lineHeight" class="value">Photon</text>
+             <g v-if="requireNetworkLogin">
+                <text :x="2 * charWidth" :y="2 * lineHeight + fontSize" class="caption">Network username:</text>
+                <foreignObject :x="19 * charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="1.25 * lineHeight">
+                    <input type="text" class="text" v-model="userName" />
+                </foreignObject>
+                <text :x="2 * charWidth" :y="4 * lineHeight + fontSize" class="caption">Network password:</text>
+                <foreignObject :x="19 * charWidth" :y="4 * lineHeight" :width="18 * charWidth" :height="1.25 * lineHeight">
+                    <input type="text" v-model="nPwd" autocomplete="off" class="masked-secret text" />
+                </foreignObject>
+            </g>
             <text :x="2 * charWidth" :y="6 * lineHeight + fontSize" class="caption">Proton password:</text>
-            <foreignObject :x="19 * charWidth" :y="6 * lineHeight" :width="18 * charWidth" :height="1 * lineHeight">
-                <input type="text" v-model="pPwd" autocomplete="off" class="masked-secret text" />
+            <foreignObject :x="19 * charWidth" :y="6 * lineHeight" :width="18 * charWidth" :height="1.25 * lineHeight">
+                <input type="text" v-model="pPwd" autocomplete="off" class="masked-secret text" @keydown.Enter="tryLogin" />
             </foreignObject>
             <g @click="tryLogin">
                 <rect :x="2 * charWidth" :y="7.9 * lineHeight" :width="10 * charWidth" :height="1.2 * lineHeight" class="button" fill="white" />
@@ -40,7 +123,7 @@
             <text class="caption" :x="2 * charWidth" :y="10 * lineHeight">{{loginMessage}}</text>
         </g>
 
-        <g v-else>
+        <g v-show="sideMode>0">
             <!--
             The tools view  16 chracters, 24 lines -->
             <svg :view-box.camel="`0 0 ${16 * charWidth} ${24 * lineHeight}`" preserveAspectRatio="none" v-if="sideMode>0"
@@ -52,7 +135,7 @@
                 <g v-show="sideMode==1">
                     <text class="caption" :x="charWidth" :y="lineHeight">Select {{entityType.name}}</text>
 
-                    <foreignObject :x="charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="2 * charWidth">
+                    <foreignObject :x="charWidth" :y="2 * lineHeight" :width="18 * charWidth" :height="2.25 * charWidth">
                         <input class="text" type="text" v-model="indexSearch" autocomplete="off"
                                @keyup.self="indexSearchChanged" @input="indexSearchChanged"
                                :placeholder="indexType.name" id="#searchEntity" />

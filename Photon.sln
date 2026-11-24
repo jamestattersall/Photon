@@ -5,6 +5,8 @@ VisualStudioVersion = 18.3.11222.16
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Photon", "Photon.csproj", "{3B6BE2D2-F2B5-47DC-A061-3AA547933CBD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProtonImport", "..\ProtonConsole2\ProtonImport.csproj", "{2A793BE9-8593-06C9-6449-F5BDDFD22C94}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,14 @@ Global
 		{3B6BE2D2-F2B5-47DC-A061-3AA547933CBD}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3B6BE2D2-F2B5-47DC-A061-3AA547933CBD}.Release|x64.ActiveCfg = Release|x64
 		{3B6BE2D2-F2B5-47DC-A061-3AA547933CBD}.Release|x64.Build.0 = Release|x64
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Debug|x64.Build.0 = Debug|Any CPU
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Release|x64.ActiveCfg = Release|Any CPU
+		{2A793BE9-8593-06C9-6449-F5BDDFD22C94}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
