@@ -3,6 +3,8 @@ import { graphics } from './graphics.js'
 
 
 
+let mainValuesRequest = 0 // latest ViewValues request; older responses are ignored
+
 const app = reactive({
     charWidth: 12, // number of arbitary screen units in one monotype character width
     fontSize: 20,  // a.k.a font height = charWidth * 5/3 for monotype font
@@ -309,14 +311,12 @@ const app = reactive({
     },
     nextPage() {
         if (this.page < this.nPages - 1) {
-            this.page++;
-            this.getMainValues()
+            this.getMainValues(this.page + 1)
         }
     },
     previousPage() {
         if (this.page > 0) {
-            this.page--;
-            this.getMainValues()
+            this.getMainValues(this.page - 1)
         }
     },
     showConfig(a) {
@@ -373,19 +373,28 @@ const app = reactive({
             })
             .catch((error) => console.error(error));
     },
-    async getMainValues() {
+    // page is only changed once its values arrive: rows are positioned from this.page (lineOrdinal),
+    // so changing it first redraws the old values a page out of place until the fetch completes
+    async getMainValues(page = this.page) {
         try {
 
             this.editingValue = null;
-            const url = `ViewValues/${this.view.id},${this.entityId},${this.page}`;
+            const request = ++mainValuesRequest;
+            const url = `ViewValues/${this.view.id},${this.entityId},${page}`;
 
             const vals = await fetchWrapper.get(url) || [];
+            if (request !== mainValuesRequest) return; // a later request superseded this one
 
             //petite-vue can't handle a Map, but this works.
             //object with properties named by attributeId and consisting of the array of values for that attribute
             //{"1234":[{attributeId: 1234, seq: 1, text: "hi"}, {attributeId:1234, seq: 2, text:"lo"}], "1235":[...], ... }
             this.valuesMap = Object.groupBy(vals, v => v.attributeId);            
             //get the array of values using bracket notation: this.valuesMap[attributeId]
+
+            // set page AFTER valuesMap. petite-vue's scheduler drops a job that is re-triggered after it has
+            // already run in the same flush: setting page first runs the row-position (:y) updates with the old
+            // rows, then the v-for swaps in the new rows and their repositioning is dropped (rows left misplaced).
+            this.page = page;
 
             this.isEditable = false;
 
@@ -612,7 +621,7 @@ const app = reactive({
             case '1':
                 let page = window.prompt('go to page:')
                 if (page > 0 && page <= this.nPages) {
-                    this.page = page - 1
+                    this.getMainValues(page - 1)
                 }
                 break;
 
