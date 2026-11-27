@@ -24,7 +24,13 @@ public class ProtonRepository
 
         if (userStarter != null)
         {
-            userStarter.Menu = await GetMenu(userStarter.Parameter);
+            // MenuId is 0 when the user's starter function isn't a menu: use the first menu instead
+            var menuId = userStarter.MenuId;
+            if (menuId == 0)
+            {
+                menuId = await GetSingleAsync<int?>("SELECT MIN(Id) FROM Menus", new { }) ?? 0;
+            }
+            userStarter.Menu = await GetMenu(menuId);
         }
         return userStarter!;
     }
@@ -97,7 +103,7 @@ INNER JOIN Lookups l on (a.LookupTypeId>0 AND l.LookupTypeId=a.LookupTypeId) OR 
 WHERE a.Id=@AttributeId
 AND l.Name like @SearchTerm + '%'
 ORDER BY l.Name",
-        new { AttributeId = attributeId, SearchTerm = searchTerm, NRows = nRows });
+        new { AttributeId = attributeId, SearchTerm = AnsiSearchTerm(searchTerm), NRows = nRows });
     }
     public async Task<IEnumerable<IndexType>> GetLookups(int attributeId, int page, int nRows)
     {
@@ -188,9 +194,17 @@ AND Term LIKE @term + '%'
 ORDER BY Term
 OFFSET @startRow ROWS 
 FETCH NEXT @Nrows ROWS ONLY",
-            new { IndexTypeId = indexTypeId, term = searchTerm, StartRow = page * nRows, Nrows = nRows });
+            new { IndexTypeId = indexTypeId, term = AnsiSearchTerm(searchTerm), StartRow = page * nRows, Nrows = nRows });
         }
     }
+
+    /// <summary>
+    /// Search terms compared with varchar(255) columns (Indexes.Term, Lookups.Name).
+    /// Dapper sends strings as nvarchar by default; comparing that with a varchar column makes
+    /// SQL Server convert the column, which can turn an index seek into a scan.
+    /// </summary>
+    private static DbString AnsiSearchTerm(string? term) =>
+        new() { Value = term, IsAnsi = true, Length = 255 };
 
     public async Task<IEnumerable<DatedValue>> GetDatedValues(int entityId, short attributeId)
     {
@@ -214,7 +228,7 @@ ORDER BY d.Value",
 
         using var multi = await cn.QueryMultipleAsync(@"
 SELECT Id, Name FROM Menus WHERE Id=@Id
-SELECT Seq, Name, Priv1, [Function], Parameter1, NextMenuId, StartMenuId
+SELECT Seq, Name, Priv1 , [Function], Parameter1, NextMenuId, StartMenuId
 FROM MenuItems 
 WHERE MenuId=@Id
 AND Seq < 9
@@ -447,7 +461,7 @@ public class DatedValue
 
 public class UserStarter
 {
-    public int Priv { get; set; }
+    public int Privilege { get; set; }
     public int FunctionId { get; set; }
     public int Parameter { get; set; }
     public int EntityTypeId { get; set; }
@@ -457,7 +471,7 @@ public class UserStarter
     {
         get
         {
-            if (FunctionId == 0) return Parameter;
+            if (FunctionId == 1) return Parameter;
             else return 0;
         }
     }

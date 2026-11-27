@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ProtonImport": {
+      "commandName": "Project",
+      "commandLineArgs": "fff"
+    }
+  }
+}
